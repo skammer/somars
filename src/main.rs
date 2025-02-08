@@ -33,7 +33,7 @@
 
   struct App {
       stations: Vec<Station>,
-      current_station: Option<usize>,
+      selected_station: Option<usize>,
       playback_state: PlaybackState,
       history: Vec<String>,
       should_quit: bool,
@@ -53,10 +53,13 @@
       let backend = CrosstermBackend::new(stdout);
       let mut terminal = Terminal::new(backend)?;
 
+      // Fetch stations
+      let stations = Station::fetch_all().await?;
+
       // Create app state
       let mut app = App {
-          stations: vec![], // Will be populated from SomaFM API
-          current_station: None,
+          stations,
+          selected_station: None,
           playback_state: PlaybackState::Stopped,
           history: Vec::new(),
           should_quit: false,
@@ -76,6 +79,24 @@
               if let Event::Key(key) = event::read()? {
                   match key.code {
                       KeyCode::Char('q') => app.should_quit = true,
+                      KeyCode::Up => {
+                          if let Some(selected) = &mut app.selected_station {
+                              if *selected > 0 {
+                                  *selected -= 1;
+                              }
+                          } else if !app.stations.is_empty() {
+                              app.selected_station = Some(0);
+                          }
+                      }
+                      KeyCode::Down => {
+                          if let Some(selected) = &mut app.selected_station {
+                              if *selected < app.stations.len() - 1 {
+                                  *selected += 1;
+                              }
+                          } else if !app.stations.is_empty() {
+                              app.selected_station = Some(0);
+                          }
+                      }
                       _ => {}
                   }
               }
@@ -106,9 +127,43 @@
           .iter()
           .map(|s| ListItem::new(s.title.as_str()))
           .collect();
+      
       let stations_list = List::new(station_items)
-          .block(Block::default().borders(Borders::ALL).title("Stations"));
-      f.render_widget(stations_list, chunks[0]);
+          .block(Block::default().borders(Borders::ALL).title("Stations"))
+          .highlight_style(Style::default().bg(Color::Blue));
+      
+      f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
+
+      // Right panel - Station details
+      if let Some(index) = app.selected_station {
+          if let Some(station) = app.stations.get(index) {
+              let details = vec![
+                  Line::from(vec![
+                      Span::styled("Title: ", Style::default().fg(Color::Yellow)),
+                      Span::raw(&station.title),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("Genre: ", Style::default().fg(Color::Yellow)),
+                      Span::raw(&station.genre),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("DJ: ", Style::default().fg(Color::Yellow)),
+                      Span::raw(&station.dj),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("Now Playing: ", Style::default().fg(Color::Yellow)),
+                      Span::raw(&station.last_playing),
+                  ]),
+                  Line::from(""),
+                  Line::from(Span::raw(&station.description)),
+              ];
+
+              let details_block = Paragraph::new(details)
+                  .block(Block::default().borders(Borders::ALL).title("Station Details"));
+              
+              f.render_widget(details_block, chunks[1]);
+          }
+      }
 
       // Right panel - Playback controls and info
       let right_chunks = Layout::default()
