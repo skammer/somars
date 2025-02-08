@@ -86,7 +86,7 @@
 
       // Main event loop
       let tick_rate = Duration::from_millis(250);
-      let last_tick = Instant::now();
+      let mut last_tick = Instant::now();
       loop {
           terminal.draw(|f| ui(f, &mut app))?;
 
@@ -115,6 +115,11 @@
           // Check for log messages
           while let Ok(log_msg) = log_rx.try_recv() {
               app.history.insert(0, log_msg);
+          }
+
+          if last_tick.elapsed() >= tick_rate {
+              last_tick = Instant::now();
+              app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
           }
 
           if event::poll(timeout)? {
@@ -329,9 +334,26 @@
           Line::from(vec![
               Span::styled("[P] Play", Style::default().fg(Color::Green)),
               Span::raw(" "),
+              Span::styled("[Space] Pause", Style::default().fg(Color::Blue)),
+              Span::raw(" "),
               Span::styled("[S] Stop", Style::default().fg(Color::Red)),
               Span::raw(" "),
               Span::styled("[Q] Quit", Style::default().fg(Color::Yellow)),
+          ]),
+          Line::from(vec![
+              Span::raw("Status: "),
+              Span::styled(
+                  match app.playback_state {
+                      PlaybackState::Playing => "Playing",
+                      PlaybackState::Paused => "Paused",
+                      PlaybackState::Stopped => "Stopped",
+                  },
+                  match app.playback_state {
+                      PlaybackState::Playing => Style::default().fg(Color::Green),
+                      PlaybackState::Paused => Style::default().fg(Color::Blue),
+                      PlaybackState::Stopped => Style::default().fg(Color::Red),
+                  },
+              ),
           ]),
       ])
       .block(Block::default().borders(Borders::ALL).title("Controls"));
