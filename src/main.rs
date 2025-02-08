@@ -95,6 +95,7 @@
                                                       let sink = sink.lock().unwrap();
                                                       sink.stop();
                                                       sink.append(source);
+                                                      sink.play();
                                                   }
                                               }
                                           }
