@@ -151,27 +151,9 @@
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
-                                                  let stream = response.bytes_stream();
-                                                  let (tx, rx) = std::sync::mpsc::sync_channel(1024);
-                                                  
-                                                  // Spawn a task to receive the stream
-                                                  tokio::spawn(async move {
-                                                      use futures::StreamExt;
-                                                      let mut stream = stream;
-                                                      while let Some(chunk) = stream.next().await {
-                                                          if let Ok(chunk) = chunk {
-                                                              if tx.send(chunk).is_err() {
-                                                                  break;
-                                                              }
-                                                          }
-                                                      }
-                                                  });
-
-                                                  // Create a custom Read implementation that receives chunks
-                                                  let reader = std::io::Read::by_ref(&mut rx.into_iter()
-                                                      .flat_map(|chunk| chunk.into_iter()));
-                                                  
-                                                  match Decoder::new(reader) {
+                                                  let bytes = response.bytes().await?;
+                                                  let cursor = std::io::Cursor::new(bytes);
+                                                  match Decoder::new(cursor) {
                                                       Ok(source) => {
                                                           add_log("Created audio decoder, starting playback".to_string()).await;
                                                           // Stop any existing playback
@@ -224,7 +206,7 @@
                               app.playback_state = PlaybackState::Stopped;
                           }
                       }
-                      KeyCode::Space => {
+                      KeyCode::Char(' ') => {
                           if let Some(sink) = &app.sink {
                               let sink = sink.lock().unwrap();
                               match app.playback_state {
