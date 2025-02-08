@@ -142,12 +142,28 @@
 
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
-                                                  add_log("Got response, buffering audio data...".to_string()).await;
-                                                  match response.bytes().await {
-                                                      Ok(bytes) => {
-                                                          add_log(format!("Received {} bytes of audio data", bytes.len())).await;
-                                                          let cursor = std::io::Cursor::new(bytes);
-                                                          match Decoder::new(cursor) {
+                                                  add_log("Got response, starting stream...".to_string()).await;
+                                                  let stream = response.bytes_stream();
+                                                  let (tx, rx) = std::sync::mpsc::sync_channel(1024);
+                                                  
+                                                  // Spawn a task to receive the stream
+                                                  tokio::spawn(async move {
+                                                      use futures::StreamExt;
+                                                      let mut stream = stream;
+                                                      while let Some(chunk) = stream.next().await {
+                                                          if let Ok(chunk) = chunk {
+                                                              if tx.send(chunk).is_err() {
+                                                                  break;
+                                                              }
+                                                          }
+                                                      }
+                                                  });
+
+                                                  // Create a custom Read implementation that receives chunks
+                                                  let reader = std::io::Read::by_ref(&mut rx.into_iter()
+                                                      .flat_map(|chunk| chunk.into_iter()));
+                                                  
+                                                  match Decoder::new(reader) {
                                                               Ok(source) => {
                                                                   add_log("Created audio decoder, starting playback".to_string()).await;
                                                                   // Stop any existing playback
