@@ -194,19 +194,12 @@
                                                           add_log(format!("Failed to get response bytes: {}", e)).await;
                                                       }
                                                   }
-                                              }
-                                          Err(e) => {
-                                              add_log(format!("Failed to connect: {}", e)).await;
-                                          }
-                                      }
-                                  });
+                                    });
 
-                                      app.playback_state = PlaybackState::Playing;
-                                      app.history.insert(0, format!("{}: Starting playback of {}",
-                                          chrono::Local::now().format("%H:%M:%S"),
-                                          &station.title));
-                                      app.history.insert(0, format!("{}: Connecting to stream...",
-                                          chrono::Local::now().format("%H:%M:%S")));
+                                    app.playback_state = PlaybackState::Playing;
+                                    app.history.insert(0, format!("{}: Starting playback of {}",
+                                    chrono::Local::now().format("%H:%M:%S"), &station.title));
+                                    app.history.insert(0, format!("{}: Connecting to stream...", chrono::Local::now().format("%H:%M:%S")));
                                   }
                               }
                           }
