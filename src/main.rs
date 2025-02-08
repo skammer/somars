@@ -14,8 +14,6 @@
       widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
       Terminal,
   };
-  use rodio::Sink;
-  use serde::Deserialize;
   use std::{
       io,
       time::{Duration, Instant}
@@ -64,7 +62,7 @@
       let tick_rate = Duration::from_millis(250);
       let last_tick = Instant::now();
       loop {
-          terminal.draw(|f| ui(f, &app))?;
+          terminal.draw(|f| ui(f, &mut app))?;
 
           let timeout = tick_rate
               .checked_sub(last_tick.elapsed())
@@ -110,7 +108,7 @@
       Ok(())
   }
 
-  fn ui<B: ratatui::backend::Backend>(f: &mut ratatui::Frame<B>, app: &App) {
+  fn ui<B: ratatui::backend::Backend>(f: &mut ratatui::Frame<B>, app: &mut App) {
       let chunks = Layout::default()
           .direction(Direction::Horizontal)
           .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())

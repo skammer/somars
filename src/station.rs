@@ -1,5 +1,4 @@
  use serde::Deserialize;
- use std::error::Error;
 
   #[derive(Debug, Deserialize)]
   pub struct Station {
