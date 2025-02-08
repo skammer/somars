@@ -107,10 +107,6 @@
                           app.loading = false;
                       }
                   }
-                  Err(e) => {
-                      add_log(format!("Failed to get response bytes: {}", e)).await;
-                      return;
-                  }
               }
               // Update spinner
               app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
@@ -158,8 +154,8 @@
                                                   match response.bytes().await {
                                                       Ok(bytes) => {
                                                           let bytes = bytes.to_vec();
-                                                  let cursor = std::io::Cursor::new(bytes);
-                                                  match Decoder::new(cursor) {
+                                                          let cursor = std::io::Cursor::new(bytes);
+                                                          match Decoder::new(cursor) {
                                                               Ok(source) => {
                                                                   add_log("Created audio decoder, starting playback".to_string()).await;
                                                                   // Stop any existing playback
@@ -195,9 +191,11 @@
                                                           add_log(format!("Failed to get response bytes: {}", e)).await;
                                                       }
                                                   }
-                                    });
+                                              }
+                                          }
+                                      });
 
-                                    app.playback_state = PlaybackState::Playing;
+                                      app.playback_state = PlaybackState::Playing;
                                     app.history.insert(0, format!("{}: Starting playback of {}",
                                     chrono::Local::now().format("%H:%M:%S"), &station.title));
                                     app.history.insert(0, format!("{}: Connecting to stream...", chrono::Local::now().format("%H:%M:%S")));
