@@ -192,6 +192,9 @@
                                                       }
                                                   }
                                               }
+                                              Err(e) => {
+                                                  add_log(format!("Failed to connect to stream: {}", e)).await;
+                                              }
                                           }
                                       });
 
