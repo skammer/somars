@@ -1,0 +1,6 @@
+.aider*
+_backup
+_temp
+_undo
+target
+Cargo.lock
