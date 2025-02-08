@@ -31,6 +31,9 @@
       history: Vec<String>,
       should_quit: bool,
       sink: Option<Arc<Mutex<Sink>>>,
+      loading: bool,
+      spinner_state: usize,
+      spinner_frames: Vec<&'static str>,
   }
 
   enum PlaybackState {
@@ -50,21 +53,30 @@
       let mut terminal = Terminal::new(backend)?;
       terminal.clear()?;
 
-      // Fetch stations
-      let stations = Station::fetch_all().await?;
-
       // Create app state
       let (_stream, stream_handle) = OutputStream::try_default()?;
       let sink = Sink::try_new(&stream_handle)?;
 
       let mut app = App {
-          stations,
+          stations: Vec::new(),
           selected_station: ListState::default(),
           playback_state: PlaybackState::Stopped,
           history: Vec::new(),
           should_quit: false,
           sink: Some(Arc::new(Mutex::new(sink))),
+          loading: true,
+          spinner_state: 0,
+          spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
       };
+
+      // Spawn station fetching task
+      let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+      tokio::spawn(async move {
+          match Station::fetch_all().await {
+              Ok(stations) => tx.send(Ok(stations)).await,
+              Err(e) => tx.send(Err(e)).await,
+          }
+      });
 
       // Main event loop
       let tick_rate = Duration::from_millis(250);
@@ -75,6 +87,24 @@
           let timeout = tick_rate
               .checked_sub(last_tick.elapsed())
               .unwrap_or_else(|| Duration::from_secs(0));
+
+          // Check for completed station fetch
+          if app.loading {
+              if let Ok(result) = rx.try_recv() {
+                  match result {
+                      Ok(stations) => {
+                          app.stations = stations;
+                          app.loading = false;
+                      }
+                      Err(e) => {
+                          app.history.insert(0, format!("Error loading stations: {}", e));
+                          app.loading = false;
+                      }
+                  }
+              }
+              // Update spinner
+              app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
+          }
 
           if event::poll(timeout)? {
               if let Event::Key(key) = event::read()? {
@@ -189,18 +219,31 @@
           .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
           .split(f.size());
 
-      // Left panel - Station list
-      let station_items: Vec<ListItem> = app
-          .stations
-          .iter()
-          .map(|s| ListItem::new(s.title.as_str()))
-          .collect();
+      // Left panel - Station list or loading indicator
+      if app.loading {
+          let loading_text = vec![
+              Line::from(vec![
+                  Span::raw(app.spinner_frames[app.spinner_state]),
+                  Span::raw(" Loading stations..."),
+              ]),
+          ];
+          let loading_para = Paragraph::new(loading_text)
+              .block(Block::default().borders(Borders::ALL).title("Loading"))
+              .alignment(ratatui::layout::Alignment::Center);
+          f.render_widget(loading_para, chunks[0]);
+      } else {
+          let station_items: Vec<ListItem> = app
+              .stations
+              .iter()
+              .map(|s| ListItem::new(s.title.as_str()))
+              .collect();
 
-      let stations_list = List::new(station_items)
-          .block(Block::default().borders(Borders::ALL).title("Stations"))
-          .highlight_style(Style::default().bg(Color::Blue));
+          let stations_list = List::new(station_items)
+              .block(Block::default().borders(Borders::ALL).title("Stations"))
+              .highlight_style(Style::default().bg(Color::Blue));
 
-      f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
+          f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
+      }
 
       // Right panel - Playback controls and info
       let right_chunks = Layout::default()
