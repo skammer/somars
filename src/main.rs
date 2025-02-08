@@ -107,6 +107,10 @@
                           app.loading = false;
                       }
                   }
+                  Err(e) => {
+                      add_log(format!("Failed to get response bytes: {}", e)).await;
+                      return;
+                  }
               }
               // Update spinner
               app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
@@ -151,8 +155,9 @@
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
-                                                  use futures_util::StreamExt;
-                                                  let bytes = response.bytes().await?.to_vec();
+                                                  match response.bytes().await {
+                                                      Ok(bytes) => {
+                                                          let bytes = bytes.to_vec();
                                                   let cursor = std::io::Cursor::new(bytes);
                                                   match Decoder::new(cursor) {
                                                               Ok(source) => {
