@@ -36,8 +36,6 @@
       channels: Vec<Channel>,
   }
 
-  use std::collections::HashMap;
-
   impl Station {
       async fn parse_pls(url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
           let response = reqwest::get(url).await?;
@@ -77,7 +75,7 @@
 
               let stream_url = Self::parse_pls(&url).await?;
 
-              Ok(Station {
+              Ok::<Station, Box<dyn std::error::Error + Send + Sync>>(Station {
                   id: channel.id,
                   title: channel.title,
                   description: channel.description,
