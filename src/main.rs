@@ -158,14 +158,20 @@
                                                                   }
                                                   
                                                                   // Start new playback
-                                                                  {
+                                                                  let playback_success = {
                                                                       if let Ok(sink) = sink.lock() {
                                                                           sink.append(source);
                                                                           sink.play();
-                                                                          add_log("Playback started".to_string()).await;
+                                                                          true
                                                                       } else {
-                                                                          add_log("Failed to lock audio sink".to_string()).await;
+                                                                          false
                                                                       }
+                                                                  };
+
+                                                                  if playback_success {
+                                                                      add_log("Playback started".to_string()).await;
+                                                                  } else {
+                                                                      add_log("Failed to lock audio sink".to_string()).await;
                                                                   }
                                                               }
                                                               Err(e) => add_log(format!("Failed to create decoder: {}", e)).await,
