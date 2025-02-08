@@ -45,9 +45,10 @@
       // Setup terminal
       enable_raw_mode()?;
       let mut stdout = io::stdout();
-      execute!(stdout, EnterAlternateScreen)?;
+      execute!(stdout, EnterAlternateScreen, crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
       let backend = CrosstermBackend::new(stdout);
       let mut terminal = Terminal::new(backend)?;
+      terminal.clear()?;
 
       // Fetch stations
       let stations = Station::fetch_all().await?;
