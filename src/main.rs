@@ -1,3 +1,4 @@
+ use futures_util::StreamExt;
  use crossterm::{
       event::{self, Event, KeyCode},
       execute,
@@ -151,10 +152,12 @@
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
-                                                  match response.bytes().await {
-                                                      Ok(bytes) => {
-                                                          let bytes = bytes.to_vec();
-                                                          let cursor = std::io::Cursor::new(bytes);
+                                                  let stream = response.bytes_stream();
+                                                  let bytes: Vec<u8> = stream
+                                                      .map(|r| r.unwrap_or_default())
+                                                      .collect()
+                                                      .await;
+                                                  let cursor = std::io::Cursor::new(bytes);
                                                           match Decoder::new(cursor) {
                                                               Ok(source) => {
                                                                   add_log("Created audio decoder, starting playback".to_string()).await;
