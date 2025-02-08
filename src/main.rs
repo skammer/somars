@@ -150,17 +150,23 @@
                                                           match Decoder::new(cursor) {
                                                               Ok(source) => {
                                                                   add_log("Created audio decoder, starting playback".to_string()).await;
+                                                                  // Stop any existing playback
                                                                   {
                                                                       if let Ok(sink) = sink.lock() {
                                                                           sink.stop();
-                                                                          sink.append(source);
-                                                                          sink.play();
-                                                                      } else {
-                                                                          add_log("Failed to lock audio sink".to_string()).await;
-                                                                          return;
                                                                       }
                                                                   }
-                                                                  add_log("Playback started".to_string()).await;
+                                                  
+                                                                  // Start new playback
+                                                                  {
+                                                                      if let Ok(sink) = sink.lock() {
+                                                                          sink.append(source);
+                                                                          sink.play();
+                                                                          add_log("Playback started".to_string()).await;
+                                                                      } else {
+                                                                          add_log("Failed to lock audio sink".to_string()).await;
+                                                                      }
+                                                                  }
                                                               }
                                                               Err(e) => add_log(format!("Failed to create decoder: {}", e)).await,
                                                           }
