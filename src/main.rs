@@ -16,8 +16,11 @@
   };
   use std::{
       io,
+      io::Cursor,
+      sync::{Arc, Mutex},
       time::{Duration, Instant}
   };
+  use rodio::{Decoder, OutputStream, Sink};
 
   mod station;
   use crate::station::Station;
@@ -28,6 +31,7 @@
       playback_state: PlaybackState,
       history: Vec<String>,
       should_quit: bool,
+      sink: Option<Arc<Mutex<Sink>>>,
   }
 
   enum PlaybackState {
@@ -50,12 +54,16 @@
       let stations = Station::fetch_all().await?;
 
       // Create app state
+      let (_stream, stream_handle) = OutputStream::try_default()?;
+      let sink = Sink::try_new(&stream_handle)?;
+
       let mut app = App {
           stations,
           selected_station: ListState::default(),
           playback_state: PlaybackState::Stopped,
           history: Vec::new(),
           should_quit: false,
+          sink: Some(Arc::new(Mutex::new(sink))),
       };
 
       // Main event loop
@@ -72,6 +80,32 @@
               if let Event::Key(key) = event::read()? {
                   match key.code {
                       KeyCode::Char('q') => app.should_quit = true,
+                      KeyCode::Char('p') => {
+                          if let Some(index) = app.selected_station.selected() {
+                              if let Some(station) = app.stations.get(index) {
+                                  if let Some(sink) = &app.sink {
+                                      let sink = sink.lock().unwrap();
+                                      sink.stop();
+
+                                      // Start playing the station
+                                      let response = reqwest::get(&station.url).await?;
+                                      let bytes = response.bytes().await?;
+                                      let cursor = std::io::Cursor::new(bytes);
+                                      let source = Decoder::new(cursor)?;
+                                      sink.append(source);
+
+                                      app.playback_state = PlaybackState::Playing;
+                                  }
+                              }
+                          }
+                      }
+                      KeyCode::Char('s') => {
+                          if let Some(sink) = &app.sink {
+                              let sink = sink.lock().unwrap();
+                              sink.stop();
+                              app.playback_state = PlaybackState::Stopped;
+                          }
+                      }
                       KeyCode::Up => {
                           if let Some(selected) = app.selected_station.selected() {
                               if selected > 0 {
@@ -100,7 +134,12 @@
           }
       }
 
-      // Cleanup terminal
+      // Cleanup terminal and audio
+      if let Some(sink) = app.sink {
+          let sink = sink.lock().unwrap();
+          sink.stop();
+      }
+
       disable_raw_mode()?;
       execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
       terminal.show_cursor()?;
