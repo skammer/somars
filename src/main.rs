@@ -152,12 +152,13 @@
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
-                                                  let stream = response.bytes_stream();
-                                                  let bytes: Vec<u8> = stream
-                                                      .map(|r| r.unwrap_or_default().to_vec())
-                                                      .flat_map(|v| v)
-                                                      .collect()
-                                                      .await;
+                                                  let mut bytes = Vec::new();
+                                                  let mut stream = response.bytes_stream();
+                                                  while let Some(chunk) = stream.next().await {
+                                                      if let Ok(chunk) = chunk {
+                                                          bytes.extend_from_slice(&chunk);
+                                                      }
+                                                  }
                                                   let cursor = std::io::Cursor::new(bytes);
                                                   match Decoder::new(cursor) {
                                                       Ok(source) => {
