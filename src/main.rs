@@ -16,7 +16,6 @@
   };
   use std::{
       io,
-      io::Cursor,
       sync::{Arc, Mutex},
       time::{Duration, Instant}
   };
@@ -89,7 +88,9 @@
 
                                       // Start playing the station
                                       let response = reqwest::get(&station.url).await?;
-                                      let source = Decoder::new(response)?;
+                                      let bytes = response.bytes().await?;
+                                      let cursor = std::io::Cursor::new(bytes);
+                                      let source = Decoder::new(cursor)?;
                                       sink.append(source);
 
                                       app.playback_state = PlaybackState::Playing;

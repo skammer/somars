@@ -39,7 +39,7 @@
   use std::collections::HashMap;
 
   impl Station {
-      async fn parse_pls(url: &str) -> Result<String, Box<dyn std::error::Error>> {
+      async fn parse_pls(url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
           let response = reqwest::get(url).await?;
           let pls_content = response.text().await?;
 
@@ -59,7 +59,7 @@
           Ok(stream_url)
       }
 
-      pub async fn fetch_all() -> Result<Vec<Self>, Box<dyn std::error::Error>> {
+      pub async fn fetch_all() -> Result<Vec<Self>, Box<dyn std::error::Error + Send + Sync>> {
           let client = reqwest::Client::new();
           let response = client
               .get("https://somafm.com/channels.json")
@@ -67,7 +67,7 @@
               .await?;
           let response: ChannelResponse = response.json().await?;
 
-          let stations = response.channels.into_iter().map(|channel| {
+          let stations = futures::future::try_join_all(response.channels.into_iter().map(|channel| async move {
               // Find the highest quality mp3 URL
               let url = channel.playlists
                   .iter()
@@ -77,7 +77,7 @@
 
               let stream_url = Self::parse_pls(&url).await?;
 
-              Station {
+              Ok(Station {
                   id: channel.id,
                   title: channel.title,
                   description: channel.description,
@@ -86,8 +86,8 @@
                   url: stream_url,
                   image: channel.image,
                   last_playing: channel.lastPlaying,
-              }
-          }).collect();
+              })
+          })).await?;
 
           Ok(stations)
       }
