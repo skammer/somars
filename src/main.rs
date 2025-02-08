@@ -154,7 +154,8 @@
                                                   add_log("Got response, starting stream...".to_string()).await;
                                                   let stream = response.bytes_stream();
                                                   let bytes: Vec<u8> = stream
-                                                      .map(|r| r.unwrap_or_default())
+                                                      .map(|r| r.unwrap_or_default().to_vec())
+                                                      .flat_map(|v| v)
                                                       .collect()
                                                       .await;
                                                   let cursor = std::io::Cursor::new(bytes);
