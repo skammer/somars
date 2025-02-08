@@ -59,10 +59,10 @@
 
       // Create channels for logging
       let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
-      
+
       let mut selected_station = ListState::default();
       selected_station.select(Some(0));
-      
+
       let mut app = App {
           stations: Vec::new(),
           selected_station,
@@ -135,7 +135,7 @@
 
                                       // Spawn a new task to handle audio playback
                                       let log_tx = log_tx.clone();
-                                      
+
                                       tokio::spawn(async move {
                                           let log_tx = log_tx.clone();
                                           let add_log = move |msg: String| {
@@ -148,59 +148,51 @@
 
                                           add_log(format!("Fetching stream from: {}", &station_url)).await;
 
-                                          match Station::parse_pls(&station_url).await {
-                                              Ok(stream_url) => {
-                                                  add_log(format!("Parsed PLS, got stream URL: {}", &stream_url)).await;
-                                                  match reqwest::get(&stream_url).await {
-                                                      Ok(response) => {
-                                                          add_log("Got stream response, starting playback...".to_string()).await;
-                                                          match response.bytes().await {
-                                                              Ok(bytes) => {
-                                                                  let cursor = std::io::Cursor::new(bytes);
-                                                                  match Decoder::new(cursor) {
-                                                                      Ok(source) => {
-                                                                          add_log("Created audio decoder, starting playback".to_string()).await;
-                                                                          // Stop any existing playback
-                                                                          {
-                                                                              if let Ok(sink) = sink.lock() {
-                                                                                  sink.stop();
-                                                                              }
-                                                                          }
-                                                                          
-                                                                          // Start new playback
-                                                                          let playback_success = {
-                                                                              if let Ok(sink) = sink.lock() {
-                                                                                  sink.append(source);
-                                                                                  sink.play();
-                                                                                  true
-                                                                              } else {
-                                                                                  false
-                                                                              }
-                                                                          };
+                                          match reqwest::get(&station_url).await {
+                                              Ok(response) => {
+                                                  add_log("Got response, starting stream...".to_string()).await;
+                                                  match response.bytes().await {
+                                                      Ok(bytes) => {
+                                                          let cursor = std::io::Cursor::new(bytes);
+                                                          match Decoder::new(cursor) {
+                                                              Ok(source) => {
+                                                                  add_log("Created audio decoder, starting playback".to_string()).await;
+                                                                  // Stop any existing playback
+                                                                  {
+                                                                      if let Ok(sink) = sink.lock() {
+                                                                          sink.stop();
+                                                                      }
+                                                                  }
 
-                                                                          if playback_success {
-                                                                              add_log("Playback started".to_string()).await;
-                                                                          } else {
-                                                                              add_log("Failed to lock audio sink".to_string()).await;
-                                                                          }
+                                                                  // Start new playback
+                                                                  let playback_success = {
+                                                                      if let Ok(sink) = sink.lock() {
+                                                                          sink.append(source);
+                                                                          sink.play();
+                                                                          true
+                                                                      } else {
+                                                                          false
                                                                       }
-                                                                      Err(e) => {
-                                                                          add_log(format!("Failed to create decoder: {}", e)).await;
-                                                                      }
+                                                                  };
+
+                                                                  if playback_success {
+                                                                      add_log("Playback started".to_string()).await;
+                                                                  } else {
+                                                                      add_log("Failed to lock audio sink".to_string()).await;
                                                                   }
                                                               }
                                                               Err(e) => {
-                                                                  add_log(format!("Failed to get stream bytes: {}", e)).await;
+                                                                  add_log(format!("Failed to create decoder: {}", e)).await;
                                                               }
                                                           }
                                                       }
                                                       Err(e) => {
-                                                          add_log(format!("Failed to connect to stream: {}", e)).await;
+                                                          add_log(format!("Failed to get response bytes: {}", e)).await;
                                                       }
                                                   }
                                               }
                                               Err(e) => {
-                                                  add_log(format!("Failed to parse PLS file: {}", e)).await;
+                                                  add_log(format!("Failed to connect: {}", e)).await;
                                               }
                                           }
                                       });
@@ -387,17 +379,12 @@
 
       // History
       let history_items: Vec<ListItem> = app
-          .history
-          .iter()
-          .map(|s| {
-              ListItem::new(Line::from(vec![
-                  Span::styled(s, Style::default())
-              ]))
-          })
-          .collect();
+           .history
+           .iter()
+           .map(|s| ListItem::new(Line::from(Span::styled(s, Style::default()))))
+           .collect();
 
       let history_list = List::new(history_items)
-          .block(Block::default().borders(Borders::ALL).title("History"))
-          .style(Style::default());
+          .block(Block::default().borders(Borders::ALL).title("History"));
       f.render_widget(history_list, right_chunks[2]);
   }
