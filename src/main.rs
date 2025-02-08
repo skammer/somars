@@ -129,7 +129,8 @@
                                       let log_tx = log_tx.clone();
                                       
                                       tokio::spawn(async move {
-                                          let add_log = |msg: &str| {
+                                          let log_tx = log_tx.clone();
+                                          let add_log = move |msg: String| {
                                               let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
                                               let log_tx = log_tx.clone();
                                               async move {
@@ -137,7 +138,7 @@
                                               }
                                           };
 
-                                          add_log(&format!("Fetching stream from: {}", &station_url)).await;
+                                          add_log(format!("Fetching stream from: {}", &station_url)).await;
 
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
@@ -149,22 +150,25 @@
                                                           match Decoder::new(cursor) {
                                                               Ok(source) => {
                                                                   add_log("Created audio decoder, starting playback").await;
-                                                                  if let Ok(mut sink) = sink.lock() {
-                                                                      sink.stop();
-                                                                      sink.append(source);
-                                                                      sink.play();
-                                                                      add_log("Playback started").await;
-                                                                  } else {
-                                                                      add_log("Failed to lock audio sink").await;
+                                                                  {
+                                                                      if let Ok(sink) = sink.lock() {
+                                                                          sink.stop();
+                                                                          sink.append(source);
+                                                                          sink.play();
+                                                                      } else {
+                                                                          add_log("Failed to lock audio sink".to_string()).await;
+                                                                          return;
+                                                                      }
                                                                   }
+                                                                  add_log("Playback started".to_string()).await;
                                                               }
-                                                              Err(e) => add_log(&format!("Failed to create decoder: {}", e)).await,
+                                                              Err(e) => add_log(format!("Failed to create decoder: {}", e)).await,
                                                           }
                                                       }
-                                                      Err(e) => add_log(&format!("Failed to get audio data: {}", e)).await,
+                                                      Err(e) => add_log(format!("Failed to get audio data: {}", e)).await,
                                                   }
                                               }
-                                              Err(e) => add_log(&format!("Failed to connect: {}", e)).await,
+                                              Err(e) => add_log(format!("Failed to connect: {}", e)).await,
                                           }
                                       });
 
