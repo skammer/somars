@@ -116,7 +116,7 @@
                                   if let Some(sink) = &app.sink {
                                       let sink = Arc::clone(sink);
                                       let station_url = station.url.clone();
-                                      
+
                                       // Spawn a new task to handle audio playback
                                       let history = Arc::new(Mutex::new(app.history.clone()));
                                       tokio::spawn(async move {
@@ -127,7 +127,7 @@
                                           };
 
                                           add_log(&format!("Fetching stream from: {}", &station_url));
-                                          
+
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
                                                   add_log("Got response, buffering audio data...");
@@ -156,9 +156,9 @@
                                               Err(e) => add_log(&format!("Failed to connect: {}", e)),
                                           }
                                       });
-                                      
+
                                       app.playback_state = PlaybackState::Playing;
-                                      app.history.insert(0, format!("{}: Starting playback of {}", 
+                                      app.history.insert(0, format!("{}: Starting playback of {}",
                                           chrono::Local::now().format("%H:%M:%S"),
                                           &station.title));
                                   }
