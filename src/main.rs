@@ -389,11 +389,16 @@
       let history_items: Vec<ListItem> = app
            .history
            .iter()
-           .map(|s| ListItem::new(Line::from(Span::styled(s, Style::default()))))
+           .map(|s| {
+               ListItem::new(
+                   Paragraph::new(s.clone())
+                       .wrap(ratatui::widgets::Wrap { trim: true })
+                       .style(Style::default())
+               )
+           })
            .collect();
 
       let history_list = List::new(history_items)
-          .block(Block::default().borders(Borders::ALL).title("History"))
-          .wrap(ratatui::widgets::Wrap { trim: true });
+          .block(Block::default().borders(Borders::ALL).title("History"));
       f.render_widget(history_list, right_chunks[2]);
   }
