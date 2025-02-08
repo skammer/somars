@@ -13,9 +13,7 @@ crossterm = "0.27"
 futures = "0.3"
 ratatui = "0.23"
 reqwest = { version = "0.11", features = ["json", "stream"] }
-rodio = { version = "0.17", features = ["symphonia-mp3"] }
-symphonia-core = "0.5"
-symphonia-codec-mp3 = "0.5"
+rodio = { version = "0.17", features = ["symphonia-all"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.138"
 tokio = { version = "1.0", features = ["full"] }
