@@ -41,7 +41,7 @@
   }
 
   #[tokio::main]
-  async fn main() -> Result<(), Box<dyn std::error::Error>> {
+  async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
       use ratatui::widgets::ListState;
       // Setup terminal
       enable_raw_mode()?;
@@ -89,9 +89,7 @@
 
                                       // Start playing the station
                                       let response = reqwest::get(&station.url).await?;
-                                      let bytes = response.bytes().await?;
-                                      let cursor = std::io::Cursor::new(bytes);
-                                      let source = Decoder::new(cursor)?;
+                                      let source = Decoder::new(response)?;
                                       sink.append(source);
 
                                       app.playback_state = PlaybackState::Playing;
