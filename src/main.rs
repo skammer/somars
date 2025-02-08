@@ -83,16 +83,23 @@
                           if let Some(index) = app.selected_station.selected() {
                               if let Some(station) = app.stations.get(index) {
                                   if let Some(sink) = &app.sink {
-                                      let sink = sink.lock().unwrap();
-                                      sink.stop();
-
-                                      // Start playing the station
-                                      let response = reqwest::get(&station.url).await?;
-                                      let bytes = response.bytes().await?;
-                                      let cursor = std::io::Cursor::new(bytes);
-                                      let source = Decoder::new(cursor)?;
-                                      sink.append(source);
-
+                                      let sink = Arc::clone(sink);
+                                      let station_url = station.url.clone();
+                                      
+                                      // Spawn a new task to handle audio playback
+                                      tokio::spawn(async move {
+                                          if let Ok(response) = reqwest::get(&station_url).await {
+                                              if let Ok(bytes) = response.bytes().await {
+                                                  let cursor = std::io::Cursor::new(bytes);
+                                                  if let Ok(source) = Decoder::new(cursor) {
+                                                      let sink = sink.lock().unwrap();
+                                                      sink.stop();
+                                                      sink.append(source);
+                                                  }
+                                              }
+                                          }
+                                      });
+                                      
                                       app.playback_state = PlaybackState::Playing;
                                   }
                               }
