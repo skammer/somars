@@ -57,6 +57,9 @@
       let (_stream, stream_handle) = OutputStream::try_default()?;
       let sink = Sink::try_new(&stream_handle)?;
 
+      // Create channels for logging
+      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
+      
       let mut app = App {
           stations: Vec::new(),
           selected_station: ListState::default(),
@@ -123,43 +126,45 @@
                                       let station_url = station.url.clone();
 
                                       // Spawn a new task to handle audio playback
-                                      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
-                                      let log_tx_clone = log_tx.clone();
+                                      let log_tx = log_tx.clone();
                                       
                                       tokio::spawn(async move {
                                           let add_log = |msg: &str| {
                                               let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                                              let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
+                                              let log_tx = log_tx.clone();
+                                              async move {
+                                                  let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
+                                              }
                                           };
 
-                                          add_log(&format!("Fetching stream from: {}", &station_url));
+                                          add_log(&format!("Fetching stream from: {}", &station_url)).await;
 
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
-                                                  add_log("Got response, buffering audio data...");
+                                                  add_log("Got response, buffering audio data...").await;
                                                   match response.bytes().await {
                                                       Ok(bytes) => {
-                                                          add_log(&format!("Received {} bytes of audio data", bytes.len()));
+                                                          add_log(&format!("Received {} bytes of audio data", bytes.len())).await;
                                                           let cursor = std::io::Cursor::new(bytes);
                                                           match Decoder::new(cursor) {
                                                               Ok(source) => {
-                                                                  add_log("Created audio decoder, starting playback");
+                                                                  add_log("Created audio decoder, starting playback").await;
                                                                   if let Ok(mut sink) = sink.lock() {
                                                                       sink.stop();
                                                                       sink.append(source);
                                                                       sink.play();
-                                                                      add_log("Playback started");
+                                                                      add_log("Playback started").await;
                                                                   } else {
-                                                                      add_log("Failed to lock audio sink");
+                                                                      add_log("Failed to lock audio sink").await;
                                                                   }
                                                               }
-                                                              Err(e) => add_log(&format!("Failed to create decoder: {}", e)),
+                                                              Err(e) => add_log(&format!("Failed to create decoder: {}", e)).await,
                                                           }
                                                       }
-                                                      Err(e) => add_log(&format!("Failed to get audio data: {}", e)),
+                                                      Err(e) => add_log(&format!("Failed to get audio data: {}", e)).await,
                                                   }
                                               }
-                                              Err(e) => add_log(&format!("Failed to connect: {}", e)),
+                                              Err(e) => add_log(&format!("Failed to connect: {}", e)).await,
                                           }
                                       });
 
