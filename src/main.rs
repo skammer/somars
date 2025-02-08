@@ -87,21 +87,49 @@
                                       let station_url = station.url.clone();
                                       
                                       // Spawn a new task to handle audio playback
+                                      let history = Arc::new(Mutex::new(app.history.clone()));
                                       tokio::spawn(async move {
-                                          if let Ok(response) = reqwest::get(&station_url).await {
-                                              if let Ok(bytes) = response.bytes().await {
-                                                  let cursor = std::io::Cursor::new(bytes);
-                                                  if let Ok(source) = Decoder::new(cursor) {
-                                                      let sink = sink.lock().unwrap();
-                                                      sink.stop();
-                                                      sink.append(source);
-                                                      sink.play();
+                                          let add_log = |msg: &str| {
+                                              if let Ok(mut history) = history.lock() {
+                                                  history.insert(0, format!("{}: {}", chrono::Local::now().format("%H:%M:%S"), msg));
+                                              }
+                                          };
+
+                                          add_log(&format!("Fetching stream from: {}", &station_url));
+                                          
+                                          match reqwest::get(&station_url).await {
+                                              Ok(response) => {
+                                                  add_log("Got response, buffering audio data...");
+                                                  match response.bytes().await {
+                                                      Ok(bytes) => {
+                                                          add_log(&format!("Received {} bytes of audio data", bytes.len()));
+                                                          let cursor = std::io::Cursor::new(bytes);
+                                                          match Decoder::new(cursor) {
+                                                              Ok(source) => {
+                                                                  add_log("Created audio decoder, starting playback");
+                                                                  if let Ok(mut sink) = sink.lock() {
+                                                                      sink.stop();
+                                                                      sink.append(source);
+                                                                      sink.play();
+                                                                      add_log("Playback started");
+                                                                  } else {
+                                                                      add_log("Failed to lock audio sink");
+                                                                  }
+                                                              }
+                                                              Err(e) => add_log(&format!("Failed to create decoder: {}", e)),
+                                                          }
+                                                      }
+                                                      Err(e) => add_log(&format!("Failed to get audio data: {}", e)),
                                                   }
                                               }
+                                              Err(e) => add_log(&format!("Failed to connect: {}", e)),
                                           }
                                       });
                                       
                                       app.playback_state = PlaybackState::Playing;
+                                      app.history.insert(0, format!("{}: Starting playback of {}", 
+                                          chrono::Local::now().format("%H:%M:%S"),
+                                          &station.title));
                                   }
                               }
                           }
