@@ -393,6 +393,7 @@
            .collect();
 
       let history_list = List::new(history_items)
-          .block(Block::default().borders(Borders::ALL).title("History"));
+          .block(Block::default().borders(Borders::ALL).title("History"))
+          .wrap(ratatui::widgets::Wrap { trim: true });
       f.render_widget(history_list, right_chunks[2]);
   }
