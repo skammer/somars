@@ -195,11 +195,11 @@
                                                       }
                                                   }
                                               }
-                                              Err(e) => {
-                                                  add_log(format!("Failed to connect: {}", e)).await;
-                                              }
+                                          Err(e) => {
+                                              add_log(format!("Failed to connect: {}", e)).await;
                                           }
-                                      });
+                                      }
+                                  });
 
                                       app.playback_state = PlaybackState::Playing;
                                       app.history.insert(0, format!("{}: Starting playback of {}",
@@ -218,17 +218,18 @@
                       }
                       KeyCode::Char(' ') => {
                           if let Some(sink) = &app.sink {
-                              let sink = sink.lock().unwrap();
-                              match app.playback_state {
-                                  PlaybackState::Playing => {
-                                      sink.pause();
-                                      app.playback_state = PlaybackState::Paused;
+                              if let Ok(sink) = sink.lock() {
+                                  match app.playback_state {
+                                      PlaybackState::Playing => {
+                                          sink.pause();
+                                          app.playback_state = PlaybackState::Paused;
+                                      }
+                                      PlaybackState::Paused => {
+                                          sink.play();
+                                          app.playback_state = PlaybackState::Playing;
+                                      }
+                                      PlaybackState::Stopped => {}
                                   }
-                                  PlaybackState::Paused => {
-                                      sink.play();
-                                      app.playback_state = PlaybackState::Playing;
-                                  }
-                                  PlaybackState::Stopped => {}
                               }
                           }
                       }
