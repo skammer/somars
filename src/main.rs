@@ -205,6 +205,8 @@
                                       app.history.insert(0, format!("{}: Starting playback of {}",
                                           chrono::Local::now().format("%H:%M:%S"),
                                           &station.title));
+                                      app.history.insert(0, format!("{}: Connecting to stream...",
+                                          chrono::Local::now().format("%H:%M:%S")));
                                   }
                               }
                           }
