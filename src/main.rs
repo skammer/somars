@@ -106,6 +106,11 @@
               app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
           }
 
+          // Check for log messages
+          while let Ok(log_msg) = log_rx.try_recv() {
+              app.history.insert(0, log_msg);
+          }
+
           if event::poll(timeout)? {
               if let Event::Key(key) = event::read()? {
                   match key.code {
@@ -118,12 +123,13 @@
                                       let station_url = station.url.clone();
 
                                       // Spawn a new task to handle audio playback
-                                      let history = Arc::new(Mutex::new(app.history.clone()));
+                                      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
+                                      let log_tx_clone = log_tx.clone();
+                                      
                                       tokio::spawn(async move {
                                           let add_log = |msg: &str| {
-                                              if let Ok(mut history) = history.lock() {
-                                                  history.insert(0, format!("{}: {}", chrono::Local::now().format("%H:%M:%S"), msg));
-                                              }
+                                              let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+                                              let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
                                           };
 
                                           add_log(&format!("Fetching stream from: {}", &station_url));
