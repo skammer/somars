@@ -142,14 +142,14 @@
 
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
-                                                  add_log("Got response, buffering audio data...").await;
+                                                  add_log("Got response, buffering audio data...".to_string()).await;
                                                   match response.bytes().await {
                                                       Ok(bytes) => {
-                                                          add_log(&format!("Received {} bytes of audio data", bytes.len())).await;
+                                                          add_log(format!("Received {} bytes of audio data", bytes.len())).await;
                                                           let cursor = std::io::Cursor::new(bytes);
                                                           match Decoder::new(cursor) {
                                                               Ok(source) => {
-                                                                  add_log("Created audio decoder, starting playback").await;
+                                                                  add_log("Created audio decoder, starting playback".to_string()).await;
                                                                   {
                                                                       if let Ok(sink) = sink.lock() {
                                                                           sink.stop();
