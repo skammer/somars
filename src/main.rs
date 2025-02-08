@@ -151,37 +151,43 @@
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
-                                                  let bytes = response.bytes().await?;
-                                                  let cursor = std::io::Cursor::new(bytes);
-                                                  match Decoder::new(cursor) {
-                                                      Ok(source) => {
-                                                          add_log("Created audio decoder, starting playback".to_string()).await;
-                                                          // Stop any existing playback
-                                                          {
-                                                              if let Ok(sink) = sink.lock() {
-                                                                  sink.stop();
-                                                              }
-                                                          }
-                                                          
-                                                          // Start new playback
-                                                          let playback_success = {
-                                                              if let Ok(sink) = sink.lock() {
-                                                                  sink.append(source);
-                                                                  sink.play();
-                                                                  true
-                                                              } else {
-                                                                  false
-                                                              }
-                                                          };
+                                                  match response.bytes().await {
+                                                      Ok(bytes) => {
+                                                          let cursor = std::io::Cursor::new(bytes);
+                                                          match Decoder::new(cursor) {
+                                                              Ok(source) => {
+                                                                  add_log("Created audio decoder, starting playback".to_string()).await;
+                                                                  // Stop any existing playback
+                                                                  {
+                                                                      if let Ok(sink) = sink.lock() {
+                                                                          sink.stop();
+                                                                      }
+                                                                  }
+                                                                  
+                                                                  // Start new playback
+                                                                  let playback_success = {
+                                                                      if let Ok(sink) = sink.lock() {
+                                                                          sink.append(source);
+                                                                          sink.play();
+                                                                          true
+                                                                      } else {
+                                                                          false
+                                                                      }
+                                                                  };
 
-                                                          if playback_success {
-                                                              add_log("Playback started".to_string()).await;
-                                                          } else {
-                                                              add_log("Failed to lock audio sink".to_string()).await;
+                                                                  if playback_success {
+                                                                      add_log("Playback started".to_string()).await;
+                                                                  } else {
+                                                                      add_log("Failed to lock audio sink".to_string()).await;
+                                                                  }
+                                                              }
+                                                              Err(e) => {
+                                                                  add_log(format!("Failed to create decoder: {}", e)).await;
+                                                              }
                                                           }
                                                       }
                                                       Err(e) => {
-                                                          add_log(format!("Failed to create decoder: {}", e)).await;
+                                                          add_log(format!("Failed to get response bytes: {}", e)).await;
                                                       }
                                                   }
                                               }
