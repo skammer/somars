@@ -5,35 +5,28 @@
   LeaveAlternateScreen},
   };
 
-  use ratatui::text::{Line, Span, Text};
+  use ratatui::text::{Line, Span};
 
   use ratatui::{
       backend::CrosstermBackend,
       layout::{Constraint, Direction, Layout},
       style::{Color, Style},
-      widgets::{Block, Borders, List, ListItem, Paragraph},
+      widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
       Terminal,
   };
-  use rodio::{Decoder, OutputStream, Sink};
+  use rodio::Sink;
   use serde::Deserialize;
   use std::{
       io,
-      sync::mpsc,
-      thread,
-      time::{Duration, Instant},
+      time::{Duration, Instant}
   };
 
-  #[derive(Debug, Deserialize)]
-  struct Station {
-      title: String,
-      description: String,
-      dj: String,
-      url: String,
-  }
+  mod station;
+  use crate::station::Station;
 
   struct App {
       stations: Vec<Station>,
-      selected_station: Option<usize>,
+      selected_station: ListState,
       playback_state: PlaybackState,
       history: Vec<String>,
       should_quit: bool,
@@ -45,7 +38,9 @@
       Stopped,
   }
 
-  fn main() -> Result<(), Box<dyn std::error::Error>> {
+  #[tokio::main]
+  async fn main() -> Result<(), Box<dyn std::error::Error>> {
+      use ratatui::widgets::ListState;
       // Setup terminal
       enable_raw_mode()?;
       let mut stdout = io::stdout();
@@ -59,7 +54,7 @@
       // Create app state
       let mut app = App {
           stations,
-          selected_station: None,
+          selected_station: ListState::default(),
           playback_state: PlaybackState::Stopped,
           history: Vec::new(),
           should_quit: false,
@@ -80,21 +75,21 @@
                   match key.code {
                       KeyCode::Char('q') => app.should_quit = true,
                       KeyCode::Up => {
-                          if let Some(selected) = &mut app.selected_station {
-                              if *selected > 0 {
-                                  *selected -= 1;
+                          if let Some(selected) = app.selected_station.selected() {
+                              if selected > 0 {
+                                  app.selected_station.select(Some(selected - 1));
                               }
                           } else if !app.stations.is_empty() {
-                              app.selected_station = Some(0);
+                              app.selected_station.select(Some(0));
                           }
                       }
                       KeyCode::Down => {
-                          if let Some(selected) = &mut app.selected_station {
-                              if *selected < app.stations.len() - 1 {
-                                  *selected += 1;
+                          if let Some(selected) = app.selected_station.selected() {
+                              if selected < app.stations.len() - 1 {
+                                  app.selected_station.select(Some(selected + 1));
                               }
                           } else if !app.stations.is_empty() {
-                              app.selected_station = Some(0);
+                              app.selected_station.select(Some(0));
                           }
                       }
                       _ => {}
@@ -127,15 +122,15 @@
           .iter()
           .map(|s| ListItem::new(s.title.as_str()))
           .collect();
-      
+
       let stations_list = List::new(station_items)
           .block(Block::default().borders(Borders::ALL).title("Stations"))
           .highlight_style(Style::default().bg(Color::Blue));
-      
+
       f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
 
       // Right panel - Station details
-      if let Some(index) = app.selected_station {
+      if let Some(index) = app.selected_station.selected() {
           if let Some(station) = app.stations.get(index) {
               let details = vec![
                   Line::from(vec![
@@ -160,7 +155,7 @@
 
               let details_block = Paragraph::new(details)
                   .block(Block::default().borders(Borders::ALL).title("Station Details"));
-              
+
               f.render_widget(details_block, chunks[1]);
           }
       }

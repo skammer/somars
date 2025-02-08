@@ -1,4 +1,5 @@
  use serde::Deserialize;
+ use std::error::Error;
 
   #[derive(Debug, Deserialize)]
   pub struct Station {
@@ -44,7 +45,7 @@
               .send()
               .await?;
           let response: ChannelResponse = response.json().await?;
-          
+
           let stations = response.channels.into_iter().map(|channel| {
               // Find the highest quality mp3 URL
               let url = channel.playlists
