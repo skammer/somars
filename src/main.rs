@@ -211,9 +211,10 @@
                       }
                       KeyCode::Char('s') => {
                           if let Some(sink) = &app.sink {
-                              let sink = sink.lock().unwrap();
-                              sink.stop();
-                              app.playback_state = PlaybackState::Stopped;
+                              if let Ok(sink) = sink.lock() {
+                                  sink.stop();
+                                  app.playback_state = PlaybackState::Stopped;
+                              }
                           }
                       }
                       KeyCode::Char(' ') => {
