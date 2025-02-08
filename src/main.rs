@@ -152,11 +152,7 @@
                                               Ok(response) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
                                                   use futures_util::StreamExt;
-                                                  let stream = response.bytes_stream();
-                                                  let bytes: Vec<u8> = stream
-                                                      .map(|r| r.unwrap_or_default())
-                                                      .collect()
-                                                      .await;
+                                                  let bytes = response.bytes().await?.to_vec();
                                                   let cursor = std::io::Cursor::new(bytes);
                                                   match Decoder::new(cursor) {
                                                               Ok(source) => {
