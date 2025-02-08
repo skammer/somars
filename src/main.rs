@@ -60,9 +60,12 @@
       // Create channels for logging
       let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
       
+      let mut selected_station = ListState::default();
+      selected_station.select(Some(0));
+      
       let mut app = App {
           stations: Vec::new(),
-          selected_station: ListState::default(),
+          selected_station,
           playback_state: PlaybackState::Stopped,
           history: Vec::new(),
           should_quit: false,
@@ -193,10 +196,14 @@
                                                               Err(e) => add_log(format!("Failed to create decoder: {}", e)).await,
                                                           }
                                                       }
-                                                      Err(e) => add_log(format!("Failed to get audio data: {}", e)).await,
+                                                      Err(e) => {
+                                                          add_log(format!("Failed to get audio data: {}", e)).await;
+                                                      }
                                                   }
                                               }
-                                              Err(e) => add_log(format!("Failed to connect: {}", e)).await,
+                                              Err(e) => {
+                                                  add_log(format!("Failed to connect: {}", e)).await;
+                                              }
                                           }
                                       });
 
@@ -213,6 +220,22 @@
                               let sink = sink.lock().unwrap();
                               sink.stop();
                               app.playback_state = PlaybackState::Stopped;
+                          }
+                      }
+                      KeyCode::Space => {
+                          if let Some(sink) = &app.sink {
+                              let sink = sink.lock().unwrap();
+                              match app.playback_state {
+                                  PlaybackState::Playing => {
+                                      sink.pause();
+                                      app.playback_state = PlaybackState::Paused;
+                                  }
+                                  PlaybackState::Paused => {
+                                      sink.play();
+                                      app.playback_state = PlaybackState::Playing;
+                                  }
+                                  PlaybackState::Stopped => {}
+                              }
                           }
                       }
                       KeyCode::Up => {
