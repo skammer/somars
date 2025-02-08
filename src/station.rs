@@ -37,7 +37,7 @@
   }
 
   impl Station {
-      async fn parse_pls(url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+      pub async fn parse_pls(url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
           let response = reqwest::get(url).await?;
           let pls_content = response.text().await?;
 
