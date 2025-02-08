@@ -5,7 +5,7 @@
   LeaveAlternateScreen},
   };
 
-  use ratatui::text::{Line, Span};
+  use ratatui::text::{Line, Span, Text};
 
   use ratatui::{
       backend::CrosstermBackend,
@@ -379,10 +379,17 @@
 
       // History
       let history_items: Vec<ListItem> = app
-           .history
-           .iter()
-           .map(|s| ListItem::new(Line::from(Span::styled(s, Style::default()))))
-           .collect();
+          .history
+          .iter()
+          .map(|s| {
+              let text = Text::from(
+                  textwrap::wrap(s, right_chunks[2].width.saturating_sub(2))
+                      .iter()
+                      .map(|s| Line::from(Span::styled(s.to_string(), Style::default())))
+              );
+              ListItem::new(text)
+          })
+          .collect();
 
       let history_list = List::new(history_items)
           .block(Block::default().borders(Borders::ALL).title("History"));
