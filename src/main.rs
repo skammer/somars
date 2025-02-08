@@ -382,11 +382,12 @@
           .history
           .iter()
           .map(|s| {
-              let text = Text::from(
-                  textwrap::wrap(s, right_chunks[2].width.saturating_sub(2))
-                      .iter()
-                      .map(|s| Line::from(Span::styled(s.to_string(), Style::default())))
-              );
+              let width = right_chunks[2].width as usize;
+              let wrapped_lines: Vec<Line> = textwrap::wrap(s, width.saturating_sub(2))
+                  .into_iter()
+                  .map(|line| Line::from(Span::styled(line, Style::default())))
+                  .collect();
+              let text = Text::from(wrapped_lines);
               ListItem::new(text)
           })
           .collect();
