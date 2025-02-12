@@ -1,3 +1,10 @@
+ use std::num::NonZeroUsize;
+ use std::error::Error;
+ use url::Url;
+ use stream_download::{Settings, StreamDownload};
+ use stream_download::storage::bounded::BoundedStorageProvider;
+ use stream_download::storage::memory::MemoryStorageProvider;
+
  use crossterm::{
       event::{self, Event, KeyCode},
       execute,
