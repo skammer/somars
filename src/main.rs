@@ -28,7 +28,6 @@
   mod station;
   use crate::station::Station;
 
-  use stream_download::source::DecodeError;
   use stream_download::storage::bounded::BoundedStorageProvider;
   use stream_download::storage::memory::MemoryStorageProvider;
   use stream_download::{Settings, StreamDownload};
@@ -145,7 +144,7 @@
                                       // Spawn a new task to handle audio playback
                                       let log_tx = log_tx.clone();
 
-                                      tokio::spawn(async move {
+                                      tokio::spawn(async move -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                           let log_tx = log_tx.clone();
                                           let add_log = move |msg: String| {
                                               let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
@@ -217,7 +216,8 @@
 
                                               Ok::<_, Box<dyn Error + Send + Sync>>(())
                                           });
-                                          handle;
+                                          handle.await??;
+                                          Ok(())
 
 
                                       //     match reqwest::get(&station_url).await {
