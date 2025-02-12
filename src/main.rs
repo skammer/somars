@@ -247,7 +247,7 @@
 
                                      let log_tx_clone = log_tx.clone();
                                      app.playback_state = PlaybackState::Playing;
-                                     
+
                                      tokio::spawn(async move {
                                          let log_tx_clone_2 = log_tx_clone.clone();
                                          if let Err(e) = handle.await {
@@ -305,6 +305,7 @@
                          }
                      }
                      KeyCode::Down => {
+                         // This crashes the app if I press Down when the list of tables is still loading. Fix it AI!
                          if let Some(selected) = app.selected_station.selected() {
                              if selected < app.stations.len() - 1 {
                                  app.selected_station.select(Some(selected + 1));
