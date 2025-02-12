@@ -230,15 +230,20 @@
 
                                                  // Clone add_log for use in the metadata handler
                                                  let add_log_clone = add_log.clone();
-                                         
+
                                                  let decoder = tokio::task::spawn_blocking(move || {
                                                      rodio::Decoder::new_mp3(IcyMetadataReader::new(
                                                          reader,
                                                          icy_headers.metadata_interval(),
                                                          move |metadata| {
-                                                             if let Some(title) = metadata.unwrap().stream_title() {
-                                                                 let _ = add_log_clone(format!("Now Playing: {}", title));
-                                                             }
+
+                                                             println!("Title: {:?}", metadata.unwrap().stream_title());
+                                                             let _ = add_log_clone(format!("Now Playing: {}", "LOL"));
+                                                             println!("\n\nTOOOOOOT\n\n");
+
+                                                             // if let Some(title) = metadata.unwrap().stream_title() {
+                                                             //     let _ = add_log_clone(format!("Now Playing: {}", title));
+                                                             // }
                                                          }
                                                      ))
                                                  }).await?;
@@ -405,7 +410,7 @@
          .constraints(
              [
                  Constraint::Length(3), // Controls
-                 Constraint::Percentage(40), // Now Playing
+                 Constraint::Percentage(30), // Now Playing
                  Constraint::Percentage(60), // History
                  ]
                  .as_ref(),
@@ -463,10 +468,6 @@
                  Line::from(vec![
                      Span::styled("DJ: ", Style::default().fg(Color::Yellow)),
                      Span::raw(&station.dj),
-                 ]),
-                 Line::from(vec![
-                     Span::styled("Now Playing: ", Style::default().fg(Color::Yellow)),
-                     Span::raw(&station.last_playing),
                  ]),
                  Line::from(""),
                  Line::from(Span::raw(&station.description)),
