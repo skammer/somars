@@ -238,6 +238,7 @@
                                                          move |metadata| {
                                                              if let Ok(metadata) = metadata {
                                                                  if let Some(title) = metadata.stream_title() {
+                                                                     // I'm getting an error here '<unnamed>' panicked at src/main.rs:241:70: there is no reactor running, must be called from the context of a Tokio 1.x runtime. Fix it AI!
                                                                      tokio::spawn(add_log_clone(format!("Now Playing: {}", title)));
                                                                  }
                                                              }
