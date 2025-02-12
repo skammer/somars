@@ -144,7 +144,7 @@
                                       // Spawn a new task to handle audio playback
                                       let log_tx = log_tx.clone();
 
-                                      tokio::spawn(async move -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+                                      let handle = tokio::spawn(async move -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                           let log_tx = log_tx.clone();
                                           let add_log = move |msg: String| {
                                               let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
@@ -273,10 +273,16 @@
                                       //     }
                                       });
 
-                                    app.playback_state = PlaybackState::Playing;
-                                    app.history.insert(0, format!("{}: Starting playback of {}",
-                                    chrono::Local::now().format("%H:%M:%S"), &station.title));
-                                    app.history.insert(0, format!("{}: Connecting to stream...", chrono::Local::now().format("%H:%M:%S")));
+                                    if let Err(e) = handle.await {
+                                        app.history.insert(0, format!("{}: Playback error: {}", 
+                                            chrono::Local::now().format("%H:%M:%S"), e));
+                                    } else {
+                                        app.playback_state = PlaybackState::Playing;
+                                        app.history.insert(0, format!("{}: Starting playback of {}",
+                                            chrono::Local::now().format("%H:%M:%S"), &station.title));
+                                        app.history.insert(0, format!("{}: Connecting to stream...", 
+                                            chrono::Local::now().format("%H:%M:%S")));
+                                    }
                                   }
                               }
                           }
