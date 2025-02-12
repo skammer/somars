@@ -150,8 +150,7 @@
                                      let station_url = station.url.clone();
 
                                      // Stop any existing playback before starting new stream
-                                     {
-                                         let locked_sink = original_sink.lock().unwrap();
+                                     if let Ok(locked_sink) = original_sink.lock() {
                                          locked_sink.stop();
                                      }
 
