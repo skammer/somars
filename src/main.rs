@@ -6,6 +6,8 @@
   LeaveAlternateScreen},
   };
 
+  use url::{Url, ParseError};
+
   use ratatui::text::{Line, Span, Text};
 
   use ratatui::{
@@ -15,15 +17,22 @@
       widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
       Terminal,
   };
+  use std::error::Error;
   use std::{
       io,
       sync::{Arc, Mutex},
       time::{Duration, Instant}
   };
+  use std::num::NonZeroUsize;
   use rodio::{Decoder, OutputStream, Sink};
 
   mod station;
   use crate::station::Station;
+
+  use stream_download::source::DecodeError;
+  use stream_download::storage::bounded::BoundedStorageProvider;
+  use stream_download::storage::memory::MemoryStorageProvider;
+  use stream_download::{Settings, StreamDownload};
 
   struct App {
       stations: Vec<Station>,
@@ -131,7 +140,7 @@
                           if let Some(index) = app.selected_station.selected() {
                               if let Some(station) = app.stations.get(index) {
                                   if let Some(sink) = &app.sink {
-                                      let sink = Arc::clone(sink);
+                                      // let sink = Arc::clone(sink);
                                       let station_url = station.url.clone();
 
                                       // Spawn a new task to handle audio playback
@@ -149,61 +158,123 @@
 
                                           add_log(format!("Fetching stream from: {}", &station_url)).await;
 
-
-                                          match reqwest::get(&station_url).await {
-                                              Ok(response) => {
+                                          let mut reader = match StreamDownload::new_http(
+                                              Url::parse(&station_url).unwrap(),
+                                              // use bounded storage to keep the underlying size from growing indefinitely
+                                              BoundedStorageProvider::new(
+                                                  // you can use any other kind of storage provider here
+                                                  MemoryStorageProvider,
+                                                  // be liberal with the buffer size, you need to make sure it holds enough space to
+                                                  // prevent any out-of-bounds reads
+                                                  NonZeroUsize::new(512 * 1024).unwrap(),
+                                              ),
+                                              Settings::default(),
+                                          )
+                                          .await
+                                          {
+                                              Ok(reader) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
-                                                  let mut bytes: Vec<u8> = Vec::new();
-                                                  let mut stream = response.bytes_stream();
-
-                                                  // Get initial buffer of data to start playback
-                                                  let mut initial_buffer = Vec::new();
-                                                  for _ in 0..10 {  // Get first 10 chunks to start
-                                                      if let Some(Ok(chunk)) = stream.next().await {
-                                                          initial_buffer.extend_from_slice(&chunk);
-                                                      }
-                                                  }
-
-                                                  let cursor = std::io::Cursor::new(initial_buffer);
-                                                  match Decoder::new(cursor) {
-                                                      Ok(source) => {
-                                                          add_log("Created audio decoder, starting playback".to_string()).await;
-                                                          // Stop any existing playback
-                                                          {
-                                                              if let Ok(sink) = sink.lock() {
-                                                                  sink.stop();
-                                                              }
-                                                          }
-
-                                                          // Start new playback
-                                                          let playback_success = {
-                                                              if let Ok(sink) = sink.lock() {
-                                                                  sink.append(source);
-                                                                  sink.play();
-                                                                  true
-                                                              } else {
-                                                                  false
-                                                              }
-                                                          };
-
-                                                          if playback_success {
-                                                              add_log("Playback started".to_string()).await;
-                                                          } else {
-                                                              add_log("Failed to lock audio sink".to_string()).await;
-                                                          }
-                                                      }
-                                                      Err(e) => {
-                                                          add_log(format!("Failed to create decoder: {}", e)).await;
-                                                      }
-                                                  }
+                                                  reader
+                                              },
+                                              Err(e) =>  {
+                                                  add_log(e.decode_error()).await;
+                                                  Ok(())
                                               }
-                                              Err(e) => {
-                                                  add_log(format!("Failed to connect to stream: {}", e)).await;
+                                          };
+
+                                          let handle = tokio::task::spawn_blocking(move || {
+                                              add_log("Playback started".to_string());
+
+                                              let (_stream, handle) = rodio::OutputStream::try_default()?;
+                                              let sink = rodio::Sink::try_new(&handle)?;
+                                              sink.append(rodio::Decoder::new(reader)?);
+                                              sink.sleep_until_end();
+
+
+                                              // Stop any existing playback
+                                              {
+                                                  // if let Ok(sink) = sink.lock() {
+                                                      // sink.stop();
+                                                  // }
                                               }
-                                          }
+
+                                              // Start new playback
+                                              // let playback_success = {
+                                                  // if let Ok(sink) = sink.lock() {
+                                                      // sink.append(source);
+                                                      // sink.play();
+                                                      // true
+                                                  // } else {
+                                                      // false
+                                                  // }
+                                              // };
+
+                                              // if playback_success {
+                                              //     add_log("Playback started".to_string());
+                                              // } else {
+                                              //     add_log("Failed to lock audio sink".to_string());
+                                              // }
+
+
+                                              Ok::<_, Box<dyn Error + Send + Sync>>(())
+                                          });
+                                          handle;
+
+
+                                      //     match reqwest::get(&station_url).await {
+                                      //         Ok(response) => {
+                                      //             add_log("Got response, starting stream...".to_string()).await;
+                                      //             let mut bytes: Vec<u8> = Vec::new();
+                                      //             let mut stream = response.bytes_stream();
+
+                                      //             // Get initial buffer of data to start playback
+                                      //             let mut initial_buffer = Vec::new();
+                                      //             for _ in 0..100 {  // Get first 10 chunks to start
+                                      //                 if let Some(Ok(chunk)) = stream.next().await {
+                                      //                     initial_buffer.extend_from_slice(&chunk);
+                                      //                 }
+                                      //             }
+
+                                      //             let cursor = std::io::Cursor::new(initial_buffer);
+                                      //             match Decoder::new(cursor) {
+                                      //                 Ok(source) => {
+                                      //                     add_log("Created audio decoder, starting playback".to_string()).await;
+                                      //                     // Stop any existing playback
+                                      //                     {
+                                      //                         if let Ok(sink) = sink.lock() {
+                                      //                             sink.stop();
+                                      //                         }
+                                      //                     }
+
+                                      //                     // Start new playback
+                                      //                     let playback_success = {
+                                      //                         if let Ok(sink) = sink.lock() {
+                                      //                             sink.append(source);
+                                      //                             sink.play();
+                                      //                             true
+                                      //                         } else {
+                                      //                             false
+                                      //                         }
+                                      //                     };
+
+                                      //                     if playback_success {
+                                      //                         add_log("Playback started".to_string()).await;
+                                      //                     } else {
+                                      //                         add_log("Failed to lock audio sink".to_string()).await;
+                                      //                     }
+                                      //                 }
+                                      //                 Err(e) => {
+                                      //                     add_log(format!("Failed to create decoder: {}", e)).await;
+                                      //                 }
+                                      //             }
+                                      //         }
+                                      //         Err(e) => {
+                                      //             add_log(format!("Failed to connect to stream: {}", e)).await;
+                                      //         }
+                                      //     }
                                       });
 
-                                      app.playback_state = PlaybackState::Playing;
+                                    app.playback_state = PlaybackState::Playing;
                                     app.history.insert(0, format!("{}: Starting playback of {}",
                                     chrono::Local::now().format("%H:%M:%S"), &station.title));
                                     app.history.insert(0, format!("{}: Connecting to stream...", chrono::Local::now().format("%H:%M:%S")));
