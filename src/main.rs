@@ -146,6 +146,9 @@
                          if let Some(index) = app.selected_station.selected() {
                              if let Some(station) = app.stations.get(index).cloned() {
                                  if let Some(original_sink) = &app.sink {
+
+                                     // Make is so that pressing P would save currently selected station index as app.active_station  AI!
+
                                      // let sink = Arc::clone(sink);
                                      let station_url = station.url.clone();
 
