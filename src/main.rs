@@ -10,560 +10,450 @@
  use stream_download::storage::memory::MemoryStorageProvider;
 
  use crossterm::{
-      event::{self, Event, KeyCode},
-      execute,
-      terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
-  LeaveAlternateScreen},
-  };
-
-  use ratatui::text::{Line, Span, Text};
-
-  use ratatui::{
-      backend::CrosstermBackend,
-      layout::{Constraint, Direction, Layout},
-      style::{Color, Style},
-      widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
-      Terminal,
-  };
-  use std::{
-      io,
-      sync::{Arc, Mutex},
-      time::{Duration, Instant}
-  };
-  use rodio::{OutputStream, Sink};
-
-  mod station;
-  use crate::station::Station;
-
-  mod mp3_stream_decoder;
-  use crate::mp3_stream_decoder::Mp3StreamDecoder;
-
-
-
-  struct App {
-      stations: Vec<Station>,
-      selected_station: ListState,
-      playback_state: PlaybackState,
-      history: Vec<String>,
-      should_quit: bool,
-      sink: Option<Arc<Mutex<Sink>>>,
-      loading: bool,
-      spinner_state: usize,
-      spinner_frames: Vec<&'static str>,
-  }
-
-  enum PlaybackState {
-      Playing,
-      Paused,
-      Stopped,
-  }
-
-  #[tokio::main]
-  async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-      use ratatui::widgets::ListState;
-      // Setup terminal
-      enable_raw_mode()?;
-      let mut stdout = io::stdout();
-      execute!(stdout, EnterAlternateScreen, crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
-      let backend = CrosstermBackend::new(stdout);
-      let mut terminal = Terminal::new(backend)?;
-      terminal.clear()?;
-
-      // Create app state
-      let (_stream, stream_handle) = OutputStream::try_default()?;
-      let sink = Sink::try_new(&stream_handle)?;
-
-      // Create channels for logging
-      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
-
-      let mut selected_station = ListState::default();
-      selected_station.select(Some(0));
-
-      let mut app = App {
-          stations: Vec::new(),
-          selected_station,
-          playback_state: PlaybackState::Stopped,
-          history: Vec::new(),
-          should_quit: false,
-          sink: Some(Arc::new(Mutex::new(sink))),
-          loading: true,
-          spinner_state: 0,
-          spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-      };
-
-      // Spawn station fetching task
-      let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-      tokio::spawn(async move {
-          match Station::fetch_all().await {
-              Ok(stations) => tx.send(Ok(stations)).await,
-              Err(e) => tx.send(Err(e)).await,
-          }
-      });
-
-      // Main event loop
-      let tick_rate = Duration::from_millis(250);
-      let mut last_tick = Instant::now();
-      loop {
-          terminal.draw(|f| ui(f, &mut app))?;
-
-          let timeout = tick_rate
-              .checked_sub(last_tick.elapsed())
-              .unwrap_or_else(|| Duration::from_secs(0));
-
-          // Check for completed station fetch
-          if app.loading {
-              if let Ok(result) = rx.try_recv() {
-                  match result {
-                      Ok(stations) => {
-                          app.stations = stations;
-                          app.loading = false;
-                      }
-                      Err(e) => {
-                          app.history.insert(0, format!("Error loading stations: {}", e));
-                          app.loading = false;
-                      }
-                  }
-              }
-              // Update spinner
-              app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
-          }
-
-          // Check for log messages
-          while let Ok(log_msg) = log_rx.try_recv() {
-              app.history.insert(0, log_msg);
-          }
-
-          if last_tick.elapsed() >= tick_rate {
-              last_tick = Instant::now();
-              app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
-          }
-
-          if event::poll(timeout)? {
-              if let Event::Key(key) = event::read()? {
-                  match key.code {
-                      KeyCode::Char('q') => app.should_quit = true,
-                      KeyCode::Char('p') => {
-                          if let Some(index) = app.selected_station.selected() {
-                              if let Some(station) = app.stations.get(index) {
-                                  if let Some(original_sink) = &app.sink {
-                                      // let sink = Arc::clone(sink);
-                                      let station_url = station.url.clone();
-
-
-
-                                      // Stop any existing playback
-                                      // {
-                                      //     if let Ok(sink) = sink.lock() {
-                                      //         add_log(format!("Stopping previous stream")).await;
-                                      //         sink.stop();
-                                      //     }
-                                      // }
-
-
-                                      let sink = original_sink.clone();
-                                      let log_tx = log_tx.clone();
-                                      let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
-
-
-                                          // Spawn a new task to handle audio playback
-
-                                                                                let add_log = move |msg: String| {
-                                                                                    let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                                                                                    let log_tx = log_tx.clone();
-                                                                                    async move {
-                                                                                        let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
-                                                                                    }
-                                                                                };
-
-                                          add_log(format!("Initializing stream from: {}", &station_url)).await;
-                                          add_log(format!("Async shenanigans for: {}", &station_url)).await;
-
-                                          // Stop any existing playback before starting new stream
-                                          // {
-                                          //     let locked_sink = sink.lock().unwrap();
-                                          //     locked_sink.stop();
-                                          // }
-
-                                          // We need to add a header to tell the Icecast server that we can parse the metadata embedded
-                                          // within the stream itself.
-                                          let client = Client::builder().request_icy_metadata().build()?;
-
-                                          let stream = HttpStream::new(client, station_url.to_string().parse()?).await?;
-                                          // let content_length = stream.content_length();
-                                          // let is_infinite = true; // content_length.is_none();
-                                          // println!("Infinite stream = {is_infinite}");
-
-                                          let icy_headers = IcyHeaders::parse_from_headers(stream.headers());
-                                          // println!("Icecast headers: {icy_headers:#?}\n");
-                                          // println!("content type={:?}\n", stream.content_type());
-
-                                          // buffer 5 seconds of audio
-                                          // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
-                                          let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 5;
-
-                                          let reader = match StreamDownload::from_stream(
-                                              stream,
-                                              BoundedStorageProvider::new(
-                                                  MemoryStorageProvider,
-                                                  NonZeroUsize::new(512 * 1024).unwrap(),
-                                              ),
-                                              Settings::default().prefetch_bytes(prefetch_bytes as u64),
-                                          )
-
-                                          // .await
-                                          //     {
-                                          //         Ok(reader) => reader,
-                                          //         Err(e) => return Err(e.decode_error().await)?,
-                                          //     };
-
-                                          .await {
-                                              Ok(reader) => {
-                                                  add_log("Got response, starting stream...".to_string()).await;
-                                                  Ok(reader)
-                                              },
-                                              Err(e) => {
-                                                  add_log(format!("Error: {}", e)).await;
-                                                  Err(e)
-                                                  // ()
-                                              }
-                                          };
-
-
-                                          // let reader = match reader {
-                                          //     Ok(r) => r,
-                                          //     Err(_) => return Ok(()),
-                                          // };
-
-                                          // let handle = tokio::task::spawn_blocking(move || {
-                                              add_log("Playback started".to_string());
-
-                                              // let (_stream, handle) = rodio::OutputStream::try_default()?;
-                                              // let sink = sink.try_new(&handle)?;
-
-                                              add_log(format!("bit rate={:?}\n", icy_headers.bitrate().unwrap()));
-
-
-                                              // Start new playback
-                                              let playback_success = match reader {
-                                                  Ok(reader) => {
-                                                      // dbg!(icy_headers.metadata_interval());
-                                                      // dbg!(reader);
-                                                      // let decoder = rodio::Decoder::new_mp3(IcyMetadataReader::new(
-                                                      //     reader,
-                                                      //     icy_headers.metadata_interval(),
-                                                      //     |_metadata| { /* Handle metadata updates if needed */ }
-                                                      // ));
-
-
-                                                      // let reader_clone = reader.clone();
-                                                      let icy_headers_clone = icy_headers.clone();
-                                                      let sink_clone = sink.clone();
-
-                                                       let decoder = tokio::task::spawn_blocking(move || {
-
-                                                           rodio::Decoder::new_mp3(IcyMetadataReader::new(
-                                                               reader,
-                                                               icy_headers.metadata_interval(),
-                                                               |_metadata| { /* Handle metadata updates if needed */ }
-                                                           ))
-
-                                                           // Mp3StreamDecoder::new(IcyMetadataReader::new(
-                                                           //     reader,
-                                                           //     icy_headers_clone.metadata_interval(),
-                                                           //     |_metadata| { /* Handle metadata updates if needed */ }
-                                                           // ))
-                                                       }).await?;
-
-                                                      // Start playback with the new decoder
-                                                      {
-                                                          let locked_sink = sink.lock().unwrap();
-                                                          locked_sink.stop();
-                                                          locked_sink.append(decoder.unwrap());
-                                                          locked_sink.play();
-                                                      }
-                                                      true
-                                                  },
-                                                  Err(_) => {
-                                                      let _ = add_log("Failed to start playback".to_string()).await;
-                                                      false
-                                                  },
-                                              };
-
-
-                                              if playback_success {
-                                                  add_log("Playback started".to_string()).await;
-                                              } else {
-                                                  add_log("Failed to lock audio sink".to_string()).await;
-                                              }
-
-                                              Ok::<_, Box<dyn Error + Send + Sync>>(())
-                                          // });
-                                          // handle.await??;
-                                          // Ok(())
-
-
-                                      //     match reqwest::get(&station_url).await {
-                                      //         Ok(response) => {
-                                      //             add_log("Got response, starting stream...".to_string()).await;
-                                      //             let mut bytes: Vec<u8> = Vec::new();
-                                      //             let mut stream = response.bytes_stream();
-
-                                      //             // Get initial buffer of data to start playback
-                                      //             let mut initial_buffer = Vec::new();
-                                      //             for _ in 0..100 {  // Get first 10 chunks to start
-                                      //                 if let Some(Ok(chunk)) = stream.next().await {
-                                      //                     initial_buffer.extend_from_slice(&chunk);
-                                      //                 }
-                                      //             }
-
-                                      //             let cursor = std::io::Cursor::new(initial_buffer);
-                                      //             match Decoder::new(cursor) {
-                                      //                 Ok(source) => {
-                                      //                     add_log("Created audio decoder, starting playback".to_string()).await;
-                                      //                     // Stop any existing playback
-                                      //                     {
-                                      //                         if let Ok(sink) = sink.lock() {
-                                      //                             sink.stop();
-                                      //                         }
-                                      //                     }
-
-                                      //                     // Start new playback
-                                      //                     let playback_success = {
-                                      //                         if let Ok(sink) = sink.lock() {
-                                      //                             sink.append(source);
-                                      //                             sink.play();
-                                      //                             true
-                                      //                         } else {
-                                      //                             false
-                                      //                         }
-                                      //                     };
-
-                                      //                     if playback_success {
-                                      //                         add_log("Playback started".to_string()).await;
-                                      //                     } else {
-                                      //                         add_log("Failed to lock audio sink".to_string()).await;
-                                      //                     }
-                                      //                 }
-                                      //                 Err(e) => {
-                                      //                     add_log(format!("Failed to create decoder: {}", e)).await;
-                                      //                 }
-                                      //             }
-                                      //         }
-                                      //         Err(e) => {
-                                      //             add_log(format!("Failed to connect to stream: {}", e)).await;
-                                      //         }
-                                      //     }
-                                      });
-
-                                    if let Err(e) = handle.await {
-                                        app.history.insert(0, format!("{}: Playback error: {}",
-                                            chrono::Local::now().format("%H:%M:%S"), e));
-                                    } else {
-                                        app.playback_state = PlaybackState::Playing;
-                                        app.history.insert(0, format!("{}: Starting playback of {}",
-                                            chrono::Local::now().format("%H:%M:%S"), &station.title));
-                                        app.history.insert(0, format!("{}: Connecting to stream...",
-                                            chrono::Local::now().format("%H:%M:%S")));
-                                    }
-
-
-
-
-                                  }
-                              }
-                          }
-                      }
-                      KeyCode::Char('s') => {
-                          if let Some(sink) = &app.sink {
-                              if let Ok(sink) = sink.lock() {
-                                  sink.stop();
-                                  sink.empty();
-                                  app.playback_state = PlaybackState::Stopped;
-                              }
-                          }
-                      }
-                      KeyCode::Char(' ') => {
-                          if let Some(sink) = &app.sink {
-                              if let Ok(sink) = sink.lock() {
-                                  match app.playback_state {
-                                      PlaybackState::Playing => {
-                                          sink.pause();
-                                          app.playback_state = PlaybackState::Paused;
-                                      }
-                                      PlaybackState::Paused => {
-                                          sink.play();
-                                          app.playback_state = PlaybackState::Playing;
-                                      }
-                                      PlaybackState::Stopped => {}
-                                  }
-                              }
-                          }
-                      }
-                      KeyCode::Up => {
-                          if let Some(selected) = app.selected_station.selected() {
-                              if selected > 0 {
-                                  app.selected_station.select(Some(selected - 1));
-                              }
-                          } else if !app.stations.is_empty() {
-                              app.selected_station.select(Some(0));
-                          }
-                      }
-                      KeyCode::Down => {
-                          if let Some(selected) = app.selected_station.selected() {
-                              if selected < app.stations.len() - 1 {
-                                  app.selected_station.select(Some(selected + 1));
-                              }
-                          } else if !app.stations.is_empty() {
-                              app.selected_station.select(Some(0));
-                          }
-                      }
-                      _ => {}
-                  }
-              }
-          }
-
-          if app.should_quit {
-              break;
-          }
-      }
-
-      // Cleanup terminal and audio
-      if let Some(sink) = app.sink {
-          let sink = sink.lock().unwrap();
-          sink.stop();
-      }
-
-      disable_raw_mode()?;
-      execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-      terminal.show_cursor()?;
-
-      Ok(())
-  }
-
-  fn ui<B: ratatui::backend::Backend>(f: &mut ratatui::Frame<B>, app: &mut App) {
-      let chunks = Layout::default()
-          .direction(Direction::Horizontal)
-          .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-          .split(f.size());
-
-      // Left panel - Station list or loading indicator
-      if app.loading {
-          let loading_text = vec![
-              Line::from(vec![
-                  Span::raw(app.spinner_frames[app.spinner_state]),
-                  Span::raw(" Loading stations..."),
-              ]),
-          ];
-          let loading_para = Paragraph::new(loading_text)
-              .block(Block::default().borders(Borders::ALL).title("Loading"))
-              .alignment(ratatui::layout::Alignment::Center);
-          f.render_widget(loading_para, chunks[0]);
-      } else {
-          let station_items: Vec<ListItem> = app
-              .stations
-              .iter()
-              .map(|s| ListItem::new(s.title.as_str()))
-              .collect();
-
-          let stations_list = List::new(station_items)
-              .block(Block::default().borders(Borders::ALL).title("Stations"))
-              .highlight_style(Style::default().bg(Color::Blue));
-
-          f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
-      }
-
-      // Right panel - Playback controls and info
-      let right_chunks = Layout::default()
-          .direction(Direction::Vertical)
-          .constraints(
-              [
-                  Constraint::Length(3), // Controls
-                  Constraint::Percentage(40), // Now Playing
-                  Constraint::Percentage(60), // History
-              ]
-              .as_ref(),
-          )
-          .split(chunks[1]);
-
-      // Controls
-      let controls = Paragraph::new(vec![
-          Line::from(vec![
-              Span::styled("[P] Play", Style::default().fg(Color::Green)),
-              Span::raw(" "),
-              Span::styled("[Space] Pause", Style::default().fg(Color::Blue)),
-              Span::raw(" "),
-              Span::styled("[S] Stop", Style::default().fg(Color::Red)),
-              Span::raw(" "),
-              Span::styled("[Q] Quit", Style::default().fg(Color::Yellow)),
-          ]),
-          Line::from(vec![
-              Span::raw("Status: "),
-              Span::styled(
-                  match app.playback_state {
-                      PlaybackState::Playing => "Playing",
-                      PlaybackState::Paused => "Paused",
-                      PlaybackState::Stopped => "Stopped",
-                  },
-                  match app.playback_state {
-                      PlaybackState::Playing => Style::default().fg(Color::Green),
-                      PlaybackState::Paused => Style::default().fg(Color::Blue),
-                      PlaybackState::Stopped => Style::default().fg(Color::Red),
-                  },
-              ),
-          ]),
-      ])
-      .block(Block::default().borders(Borders::ALL).title("Controls"));
-      f.render_widget(controls, right_chunks[0]);
-
-      // Now Playing
-      let now_playing = if let Some(index) = app.selected_station.selected() {
-          if let Some(station) = app.stations.get(index) {
-              Paragraph::new(vec![
-                  Line::from(vec![
-                      Span::styled("Title: ", Style::default().fg(Color::Yellow)),
-                      Span::raw(&station.title),
-                  ]),
-                  Line::from(vec![
-                      Span::styled("Genre: ", Style::default().fg(Color::Yellow)),
-                      Span::raw(&station.genre),
-                  ]),
-                  Line::from(vec![
-                      Span::styled("DJ: ", Style::default().fg(Color::Yellow)),
-                      Span::raw(&station.dj),
-                  ]),
-                  Line::from(vec![
-                      Span::styled("Now Playing: ", Style::default().fg(Color::Yellow)),
-                      Span::raw(&station.last_playing),
-                  ]),
-                  Line::from(""),
-                  Line::from(Span::raw(&station.description)),
-              ])
-              .wrap(ratatui::widgets::Wrap { trim: true })
-          } else {
-              Paragraph::new(vec![Line::from("No station selected")])
-          }
-      } else {
-          Paragraph::new(vec![Line::from("No station selected")])
-      }
-      .block(Block::default().borders(Borders::ALL).title("Now Playing"));
-      f.render_widget(now_playing, right_chunks[1]);
-
-      // History
-      let history_items: Vec<ListItem> = app
-          .history
-          .iter()
-          .map(|s| {
-              let width = right_chunks[2].width as usize;
-              let wrapped_lines: Vec<Line> = textwrap::wrap(s, width.saturating_sub(2))
-                  .into_iter()
-                  .map(|line| Line::from(Span::styled(line, Style::default())))
-                  .collect();
-              let text = Text::from(wrapped_lines);
-              ListItem::new(text)
-          })
-          .collect();
-
-      let history_list = List::new(history_items)
-          .block(Block::default().borders(Borders::ALL).title("History"));
-      f.render_widget(history_list, right_chunks[2]);
-  }
+     event::{self, Event, KeyCode},
+     execute,
+     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
+         LeaveAlternateScreen},
+ };
+
+ use ratatui::text::{Line, Span, Text};
+
+ use ratatui::{
+     backend::CrosstermBackend,
+     layout::{Constraint, Direction, Layout},
+     style::{Color, Style},
+     widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
+     Terminal,
+ };
+ use std::{
+     io,
+     sync::{Arc, Mutex},
+     time::{Duration, Instant}
+ };
+ use rodio::{OutputStream, Sink};
+
+ mod station;
+ use crate::station::Station;
+
+ mod mp3_stream_decoder;
+ use crate::mp3_stream_decoder::Mp3StreamDecoder;
+
+
+
+ struct App {
+     stations: Vec<Station>,
+     selected_station: ListState,
+     playback_state: PlaybackState,
+     history: Vec<String>,
+     should_quit: bool,
+     sink: Option<Arc<Mutex<Sink>>>,
+     loading: bool,
+     spinner_state: usize,
+     spinner_frames: Vec<&'static str>,
+ }
+
+ enum PlaybackState {
+     Playing,
+     Paused,
+     Stopped,
+ }
+
+ #[tokio::main]
+ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+     use ratatui::widgets::ListState;
+     // Setup terminal
+     enable_raw_mode()?;
+     let mut stdout = io::stdout();
+     execute!(stdout, EnterAlternateScreen, crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
+     let backend = CrosstermBackend::new(stdout);
+     let mut terminal = Terminal::new(backend)?;
+     terminal.clear()?;
+
+     // Create app state
+     let (_stream, stream_handle) = OutputStream::try_default()?;
+     let sink = Sink::try_new(&stream_handle)?;
+
+     // Create channels for logging
+     let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
+
+     let mut selected_station = ListState::default();
+     selected_station.select(Some(0));
+
+     let mut app = App {
+         stations: Vec::new(),
+         selected_station,
+         playback_state: PlaybackState::Stopped,
+         history: Vec::new(),
+         should_quit: false,
+         sink: Some(Arc::new(Mutex::new(sink))),
+         loading: true,
+         spinner_state: 0,
+         spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+     };
+
+     // Spawn station fetching task
+     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+     tokio::spawn(async move {
+         match Station::fetch_all().await {
+             Ok(stations) => tx.send(Ok(stations)).await,
+             Err(e) => tx.send(Err(e)).await,
+         }
+     });
+
+     // Main event loop
+     let tick_rate = Duration::from_millis(250);
+     let mut last_tick = Instant::now();
+     loop {
+         terminal.draw(|f| ui(f, &mut app))?;
+
+         let timeout = tick_rate
+             .checked_sub(last_tick.elapsed())
+             .unwrap_or_else(|| Duration::from_secs(0));
+
+         // Check for completed station fetch
+         if app.loading {
+             if let Ok(result) = rx.try_recv() {
+                 match result {
+                     Ok(stations) => {
+                         app.stations = stations;
+                         app.loading = false;
+                     }
+                     Err(e) => {
+                         app.history.insert(0, format!("Error loading stations: {}", e));
+                         app.loading = false;
+                     }
+                 }
+             }
+             // Update spinner
+             app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
+         }
+
+         // Check for log messages
+         while let Ok(log_msg) = log_rx.try_recv() {
+             app.history.insert(0, log_msg);
+         }
+
+         if last_tick.elapsed() >= tick_rate {
+             last_tick = Instant::now();
+             app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
+         }
+
+         if event::poll(timeout)? {
+             if let Event::Key(key) = event::read()? {
+                 match key.code {
+                     KeyCode::Char('q') => app.should_quit = true,
+                     KeyCode::Char('p') => {
+                         if let Some(index) = app.selected_station.selected() {
+                             if let Some(station) = app.stations.get(index) {
+                                 if let Some(original_sink) = &app.sink {
+                                     // let sink = Arc::clone(sink);
+                                     let station_url = station.url.clone();
+
+                                     // Stop any existing playback before starting new stream
+                                     {
+                                         let locked_sink = original_sink.lock().unwrap();
+                                         locked_sink.stop();
+                                     }
+
+                                     let sink = original_sink.clone();
+                                     let log_tx = log_tx.clone();
+                                     let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
+
+
+                                         // Spawn a new task to handle audio playback
+
+                                         let add_log = move |msg: String| {
+                                             let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+                                             let log_tx = log_tx.clone();
+                                             async move {
+                                                 let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
+                                             }
+                                         };
+
+                                         add_log(format!("Initializing stream from: {}", &station_url)).await;
+                                         add_log(format!("Async shenanigans for: {}", &station_url)).await;
+
+                                         // We need to add a header to tell the Icecast server that we can parse the metadata embedded
+                                         // within the stream itself.
+                                         let client = Client::builder().request_icy_metadata().build()?;
+
+                                         let stream = HttpStream::new(client, station_url.to_string().parse()?).await?;
+
+                                         let icy_headers = IcyHeaders::parse_from_headers(stream.headers());
+
+                                         // buffer 5 seconds of audio
+                                         // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
+                                         let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 5;
+
+                                         let reader = match StreamDownload::from_stream(
+                                             stream,
+                                             BoundedStorageProvider::new(
+                                                 MemoryStorageProvider,
+                                                 NonZeroUsize::new(512 * 1024).unwrap(),
+                                             ),
+                                             Settings::default().prefetch_bytes(prefetch_bytes as u64),
+                                         )
+
+                                         .await {
+                                             Ok(reader) => {
+                                                 add_log("Got response, starting stream...".to_string()).await;
+                                                 Ok(reader)
+                                             },
+                                             Err(e) => {
+                                                 add_log(format!("Error: {}", e)).await;
+                                                 Err(e)
+                                             }
+                                         };
+
+                                         add_log("Playback started".to_string());
+
+                                         add_log(format!("bit rate={:?}\n", icy_headers.bitrate().unwrap()));
+
+
+                                         // Start new playback
+                                         let playback_success = match reader {
+                                             Ok(reader) => {
+                                                 let icy_headers_clone = icy_headers.clone();
+                                                 let sink_clone = sink.clone();
+
+                                                 let decoder = tokio::task::spawn_blocking(move || {
+
+                                                     rodio::Decoder::new_mp3(IcyMetadataReader::new(
+                                                         reader,
+                                                         icy_headers.metadata_interval(),
+                                                         |_metadata| { /* Handle metadata updates if needed */ }
+                                                     ))
+                                                 }).await?;
+
+                                                 // Start playback with the new decoder
+                                                 {
+                                                     let locked_sink = sink.lock().unwrap();
+                                                     locked_sink.append(decoder.unwrap());
+                                                     locked_sink.play();
+                                                 }
+                                                 true
+                                             },
+                                             Err(_) => {
+                                                 let _ = add_log("Failed to start playback".to_string()).await;
+                                                 false
+                                             },
+                                         };
+
+                                         if playback_success {
+                                             add_log("Playback started".to_string()).await;
+                                         } else {
+                                             add_log("Failed to lock audio sink".to_string()).await;
+                                         }
+
+                                         Ok::<_, Box<dyn Error + Send + Sync>>(())
+                                     });
+
+                                     // This blocks the main thread while the handle is running. Make all of it async
+                                     if let Err(e) = handle.await {
+                                         app.history.insert(0, format!("{}: Playback error: {}",
+                                             chrono::Local::now().format("%H:%M:%S"), e));
+                                     } else {
+                                         app.playback_state = PlaybackState::Playing;
+                                         app.history.insert(0, format!("{}: Starting playback of {}",
+                                             chrono::Local::now().format("%H:%M:%S"), &station.title));
+                                         app.history.insert(0, format!("{}: Connecting to stream...",
+                                             chrono::Local::now().format("%H:%M:%S")));
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                     KeyCode::Char('s') => {
+                         if let Some(sink) = &app.sink {
+                             if let Ok(sink) = sink.lock() {
+                                 sink.stop();
+                                 sink.empty();
+                                 app.playback_state = PlaybackState::Stopped;
+                             }
+                         }
+                     }
+                     KeyCode::Char(' ') => {
+                         if let Some(sink) = &app.sink {
+                             if let Ok(sink) = sink.lock() {
+                                 match app.playback_state {
+                                     PlaybackState::Playing => {
+                                         sink.pause();
+                                         app.playback_state = PlaybackState::Paused;
+                                     }
+                                     PlaybackState::Paused => {
+                                         sink.play();
+                                         app.playback_state = PlaybackState::Playing;
+                                     }
+                                     PlaybackState::Stopped => {}
+                                 }
+                             }
+                         }
+                     }
+                     KeyCode::Up => {
+                         if let Some(selected) = app.selected_station.selected() {
+                             if selected > 0 {
+                                 app.selected_station.select(Some(selected - 1));
+                             }
+                         } else if !app.stations.is_empty() {
+                             app.selected_station.select(Some(0));
+                         }
+                     }
+                     KeyCode::Down => {
+                         if let Some(selected) = app.selected_station.selected() {
+                             if selected < app.stations.len() - 1 {
+                                 app.selected_station.select(Some(selected + 1));
+                             }
+                         } else if !app.stations.is_empty() {
+                             app.selected_station.select(Some(0));
+                         }
+                     }
+                     _ => {}
+                 }
+             }
+         }
+
+         if app.should_quit {
+             break;
+         }
+     }
+
+     // Cleanup terminal and audio
+     if let Some(sink) = app.sink {
+         let sink = sink.lock().unwrap();
+         sink.stop();
+     }
+
+     disable_raw_mode()?;
+     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+     terminal.show_cursor()?;
+
+     Ok(())
+ }
+
+ fn ui<B: ratatui::backend::Backend>(f: &mut ratatui::Frame<B>, app: &mut App) {
+     let chunks = Layout::default()
+         .direction(Direction::Horizontal)
+         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+         .split(f.size());
+
+     // Left panel - Station list or loading indicator
+     if app.loading {
+         let loading_text = vec![
+             Line::from(vec![
+                 Span::raw(app.spinner_frames[app.spinner_state]),
+                 Span::raw(" Loading stations..."),
+             ]),
+         ];
+         let loading_para = Paragraph::new(loading_text)
+             .block(Block::default().borders(Borders::ALL).title("Loading"))
+             .alignment(ratatui::layout::Alignment::Center);
+         f.render_widget(loading_para, chunks[0]);
+     } else {
+         let station_items: Vec<ListItem> = app
+             .stations
+             .iter()
+             .map(|s| ListItem::new(s.title.as_str()))
+             .collect();
+
+         let stations_list = List::new(station_items)
+             .block(Block::default().borders(Borders::ALL).title("Stations"))
+             .highlight_style(Style::default().bg(Color::Blue));
+
+         f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
+     }
+
+     // Right panel - Playback controls and info
+     let right_chunks = Layout::default()
+         .direction(Direction::Vertical)
+         .constraints(
+             [
+                 Constraint::Length(3), // Controls
+                 Constraint::Percentage(40), // Now Playing
+                 Constraint::Percentage(60), // History
+                 ]
+                 .as_ref(),
+         )
+         .split(chunks[1]);
+
+     // Controls
+     let controls = Paragraph::new(vec![
+         Line::from(vec![
+             Span::styled("[P] Play", Style::default().fg(Color::Green)),
+             Span::raw(" "),
+             Span::styled("[Space] Pause", Style::default().fg(Color::Blue)),
+             Span::raw(" "),
+             Span::styled("[S] Stop", Style::default().fg(Color::Red)),
+             Span::raw(" "),
+             Span::styled("[Q] Quit", Style::default().fg(Color::Yellow)),
+         ]),
+         Line::from(vec![
+             Span::raw("Status: "),
+             Span::styled(
+                 match app.playback_state {
+                     PlaybackState::Playing => "Playing",
+                     PlaybackState::Paused => "Paused",
+                     PlaybackState::Stopped => "Stopped",
+                 },
+                 match app.playback_state {
+                     PlaybackState::Playing => Style::default().fg(Color::Green),
+                     PlaybackState::Paused => Style::default().fg(Color::Blue),
+                     PlaybackState::Stopped => Style::default().fg(Color::Red),
+                 },
+             ),
+         ]),
+     ])
+     .block(Block::default().borders(Borders::ALL).title("Controls"));
+     f.render_widget(controls, right_chunks[0]);
+
+     // Now Playing
+     let now_playing = if let Some(index) = app.selected_station.selected() {
+         if let Some(station) = app.stations.get(index) {
+             Paragraph::new(vec![
+                 Line::from(vec![
+                     Span::styled("Title: ", Style::default().fg(Color::Yellow)),
+                     Span::raw(&station.title),
+                 ]),
+                 Line::from(vec![
+                     Span::styled("Genre: ", Style::default().fg(Color::Yellow)),
+                     Span::raw(&station.genre),
+                 ]),
+                 Line::from(vec![
+                     Span::styled("DJ: ", Style::default().fg(Color::Yellow)),
+                     Span::raw(&station.dj),
+                 ]),
+                 Line::from(vec![
+                     Span::styled("Now Playing: ", Style::default().fg(Color::Yellow)),
+                     Span::raw(&station.last_playing),
+                 ]),
+                 Line::from(""),
+                 Line::from(Span::raw(&station.description)),
+             ])
+             .wrap(ratatui::widgets::Wrap { trim: true })
+         } else {
+             Paragraph::new(vec![Line::from("No station selected")])
+         }
+     } else {
+         Paragraph::new(vec![Line::from("No station selected")])
+     }
+     .block(Block::default().borders(Borders::ALL).title("Now Playing"));
+     f.render_widget(now_playing, right_chunks[1]);
+
+     // History
+     let history_items: Vec<ListItem> = app
+         .history
+         .iter()
+         .map(|s| {
+             let width = right_chunks[2].width as usize;
+             let wrapped_lines: Vec<Line> = textwrap::wrap(s, width.saturating_sub(2))
+                 .into_iter()
+                 .map(|line| Line::from(Span::styled(line, Style::default())))
+                 .collect();
+             let text = Text::from(wrapped_lines);
+             ListItem::new(text)
+         })
+         .collect();
+
+     let history_list = List::new(history_items)
+         .block(Block::default().borders(Borders::ALL).title("History"));
+     f.render_widget(history_list, right_chunks[2]);
+ }
