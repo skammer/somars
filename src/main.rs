@@ -146,7 +146,7 @@
                           if let Some(index) = app.selected_station.selected() {
                               if let Some(station) = app.stations.get(index) {
                                   if let Some(sink) = &app.sink {
-                                      // let sink = Arc::clone(sink);
+                                      let sink = Arc::clone(sink);
                                       let station_url = station.url.clone();
 
                                       // Spawn a new task to handle audio playback
@@ -194,51 +194,64 @@
                                           //     Err(_) => return Ok(()),
                                           // };
 
-                                          let handle = tokio::task::spawn_blocking(move || {
-                                              // add_log("Playback started".to_string());
+                                          // let handle = tokio::task::spawn_blocking(move || {
+                                              add_log("Playback started".to_string()).await;
 
-                                              let (_stream, handle) = rodio::OutputStream::try_default()?;
-                                              let sink = rodio::Sink::try_new(&handle)?;
-
-                                              match reader {
-                                                  Ok(reader) => sink.append(Mp3StreamDecoder::new(reader).unwrap()),
-                                                  Err(_) => {
-                                                      add_log("Failed to start playback".to_string());
-                                                      ()
-                                                  },
-                                              }
-                                              sink.sleep_until_end();
+                                              // let (_stream, handle) = rodio::OutputStream::try_default()?;
+                                              // let sink = sink.try_new(&handle)?;
 
 
                                               // Stop any existing playback
                                               {
+                                                  if let Ok(sink) = sink.lock() {
+                                                  // sink.stop();
+                                                  }
+                                              }
+
+
+
+                                              // Start new playback
+                                              let playback_success = {
+                                                  if let Ok(sink) = sink.lock() {
+
+                                                      match reader {
+                                                          Ok(reader) => sink.append(Mp3StreamDecoder::new(reader).unwrap()),
+                                                          Err(_) => {
+                                                              add_log("Failed to start playback".to_string()).await;
+                                                              ()
+                                                          },
+                                                      }
+
+                                                      // sink.append(source);
+                                                      sink.play();
+                                                      true
+                                                  } else {
+                                                      false
+                                                  }
+                                              };
+
+
+                                              {
                                                   // if let Ok(sink) = sink.lock() {
                                                       // sink.stop();
+                                                      // sink.sleep_until_end();
                                                   // }
                                               }
 
-                                              // Start new playback
-                                              // let playback_success = {
-                                                  // if let Ok(sink) = sink.lock() {
-                                                      // sink.append(source);
-                                                      // sink.play();
-                                                      // true
-                                                  // } else {
-                                                      // false
-                                                  // }
-                                              // };
 
-                                              // if playback_success {
-                                              //     add_log("Playback started".to_string());
-                                              // } else {
-                                              //     add_log("Failed to lock audio sink".to_string());
-                                              // }
+
+
+                                              if playback_success {
+                                                  add_log("Playback started".to_string()).await;
+                                              } else {
+                                                  add_log("Failed to lock audio sink".to_string()).await;
+                                              }
 
 
                                               Ok::<_, Box<dyn Error + Send + Sync>>(())
-                                          });
-                                          handle.await??;
-                                          Ok(())
+                                          // });
+                                          // handle.await??;
+                                          // Ok(())
 
 
                                       //     match reqwest::get(&station_url).await {

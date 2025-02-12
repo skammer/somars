@@ -20,6 +20,9 @@ serde_json = "1.0.138"
 tokio = { version = "1.0", features = ["full"] }
 chrono = "0.4"
 textwrap = "0.16"
-stream-download = { version = "0.14.1", features = ["reqwest-native-tls"] }
+stream-download = { version = "0.14.1", features = [
+    "reqwest-native-tls",
+    "async-read",
+] }
 url = "2.5.4"
 minimp3 = "0.5.1"
