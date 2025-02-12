@@ -1,9 +1,7 @@
  use std::num::NonZeroUsize;
  use std::error::Error;
- use url::Url;
  use stream_download::http::HttpStream;
  use stream_download::http::reqwest::Client;
- use stream_download::source::DecodeError;
  use stream_download::source::SourceStream;
  use stream_download::{Settings, StreamDownload};
  use stream_download::storage::bounded::BoundedStorageProvider;
@@ -203,7 +201,7 @@
 
                                               // Stop any existing playback
                                               {
-                                                  if let Ok(sink) = sink.lock() {
+                                                  if let Ok(_sink) = sink.lock() {
                                                   // sink.stop();
                                                   }
                                               }
@@ -211,23 +209,20 @@
 
 
                                               // Start new playback
-                                              let playback_success = {
-                                                  if let Ok(sink) = sink.lock() {
-
-                                                      match reader {
-                                                          Ok(reader) => sink.append(Mp3StreamDecoder::new(reader).unwrap()),
-                                                          Err(_) => {
-                                                              add_log("Failed to start playback".to_string()).await;
-                                                              ()
-                                                          },
+                                              let playback_success = match reader {
+                                                  Ok(reader) => {
+                                                      if let Ok(mut sink_guard) = sink.lock() {
+                                                          sink_guard.append(Mp3StreamDecoder::new(reader).unwrap());
+                                                          sink_guard.play();
+                                                          true
+                                                      } else {
+                                                          false
                                                       }
-
-                                                      // sink.append(source);
-                                                      sink.play();
-                                                      true
-                                                  } else {
+                                                  },
+                                                  Err(_) => {
+                                                      let _ = add_log("Failed to start playback".to_string()).await;
                                                       false
-                                                  }
+                                                  },
                                               };
 
 
