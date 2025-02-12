@@ -367,8 +367,8 @@
              .iter()
              .enumerate()
              .map(|(i, s)| {
-                 let style = if Some(i) == app.selected_station.selected() {
-                     Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::UNDERLINED)
+                 let style = if Some(i) == app.active_station {
+                     Style::default().add_modifier(ratatui::style::Modifier::UNDERLINED)
                  } else {
                      Style::default()
                  };
@@ -378,7 +378,7 @@
 
          let stations_list = List::new(station_items)
              .block(Block::default().borders(Borders::ALL).title("Stations"))
-             .highlight_style(Style::default().bg(Color::Blue).fg(Color::Green).add_modifier(ratatui::style::Modifier::UNDERLINED));
+             .highlight_style(Style::default().bg(Color::Blue));
 
          f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
      }
