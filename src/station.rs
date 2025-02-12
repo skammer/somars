@@ -1,6 +1,6 @@
  use serde::Deserialize;
 
-  #[derive(Debug, Deserialize)]
+  #[derive(Debug, Deserialize, Clone)]
   pub struct Station {
       pub id: String,
       pub title: String,
