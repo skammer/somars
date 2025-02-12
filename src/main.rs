@@ -36,7 +36,6 @@
  use crate::station::Station;
 
  mod mp3_stream_decoder;
- use crate::mp3_stream_decoder::Mp3StreamDecoder;
 
 
 
@@ -144,7 +143,8 @@
                      KeyCode::Char('q') => app.should_quit = true,
                      KeyCode::Char('p') => {
                          if let Some(index) = app.selected_station.selected() {
-                             if let Some(station) = app.stations.get(index) {
+                             let stations = app.stations.clone();
+                             if let Some(station) = stations.get(index) {
                                  if let Some(original_sink) = &app.sink {
                                      // let sink = Arc::clone(sink);
                                      let station_url = station.url.clone();
@@ -212,8 +212,6 @@
                                          // Start new playback
                                          let playback_success = match reader {
                                              Ok(reader) => {
-                                                 let icy_headers_clone = icy_headers.clone();
-                                                 let sink_clone = sink.clone();
 
                                                  let decoder = tokio::task::spawn_blocking(move || {
 
@@ -248,22 +246,31 @@
                                      });
 
                                      let log_tx_clone = log_tx.clone();
+                                     let app_state = Arc::new(Mutex::new(PlaybackState::Playing));
+                                     let app_state_clone = Arc::clone(&app_state);
+                                     
                                      tokio::spawn(async move {
                                          let log_tx_clone_2 = log_tx_clone.clone();
                                          if let Err(e) = handle.await {
                                              let _ = log_tx_clone_2.send(format!("{}: Playback error: {}",
                                                  chrono::Local::now().format("%H:%M:%S"), e)).await;
 
-                                             app.playback_state = PlaybackState::Playing;
-                                             app.history.insert(0, format!("{}: Starting playback of {}",
-                                                 chrono::Local::now().format("%H:%M:%S"), &station.title));
-                                             app.history.insert(0, format!("{}: Connecting to stream...",
-                                                 chrono::Local::now().format("%H:%M:%S")));
+                                             if let Ok(mut state) = app_state_clone.lock() {
+                                                 *state = PlaybackState::Playing;
+                                             }
+                                             let _ = log_tx_clone_2.send(format!("{}: Starting playback of {}",
+                                                 chrono::Local::now().format("%H:%M:%S"), &station.title)).await;
+                                             let _ = log_tx_clone_2.send(format!("{}: Connecting to stream...",
+                                                 chrono::Local::now().format("%H:%M:%S"))).await;
                                          } else {
-                                             app.history.insert(0, format!("{}: No audio sink available",
-                                                 chrono::Local::now().format("%H:%M:%S")));
+                                             let _ = log_tx_clone_2.send(format!("{}: No audio sink available",
+                                                 chrono::Local::now().format("%H:%M:%S"))).await;
                                          }
                                      });
+                                     
+                                     if let Ok(mut state) = app_state.lock() {
+                                         app.playback_state = *state;
+                                     }
 
 
                                  }
