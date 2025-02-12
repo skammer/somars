@@ -1,6 +1,10 @@
  use std::num::NonZeroUsize;
  use std::error::Error;
  use url::Url;
+ use stream_download::http::HttpStream;
+ use stream_download::http::reqwest::Client;
+ use stream_download::source::DecodeError;
+ use stream_download::source::SourceStream;
  use stream_download::{Settings, StreamDownload};
  use stream_download::storage::bounded::BoundedStorageProvider;
  use stream_download::storage::memory::MemoryStorageProvider;
@@ -30,6 +34,10 @@
 
   mod station;
   use crate::station::Station;
+
+  mod mp3_stream_decoder;
+  use crate::mp3_stream_decoder::Mp3StreamDecoder;
+
 
 
   struct App {
@@ -145,7 +153,7 @@
                                       let log_tx = log_tx.clone();
 
                                       let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
-                                          let log_tx = log_tx.clone(); 
+                                          let log_tx = log_tx.clone();
                                           let add_log = move |msg: String| {
                                               let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
                                               let log_tx = log_tx.clone();
@@ -156,8 +164,13 @@
 
                                           add_log(format!("Fetching stream from: {}", &station_url)).await;
 
-                                          let reader = match StreamDownload::new_http(
-                                              Url::parse(&station_url).unwrap(),
+                                          let stream = HttpStream::<Client>::create(station_url.to_string().parse()?).await;
+                                              // let content_length = stream.content_length();
+                                              // let is_infinite = true; // content_length.is_none();
+                                              // println!("Infinite stream = {is_infinite}");
+
+                                          let reader = match StreamDownload::from_stream(
+                                              stream.unwrap(),
                                               BoundedStorageProvider::new(
                                                   MemoryStorageProvider,
                                                   NonZeroUsize::new(512 * 1024).unwrap(),
@@ -172,20 +185,28 @@
                                               Err(e) => {
                                                   add_log(format!("Error: {}", e)).await;
                                                   Err(e)
+                                                  // ()
                                               }
                                           };
 
-                                          let reader = match reader {
-                                              Ok(r) => r,
-                                              Err(_) => return Ok(()),
-                                          };
+                                          // let reader = match reader {
+                                          //     Ok(r) => r,
+                                          //     Err(_) => return Ok(()),
+                                          // };
 
                                           let handle = tokio::task::spawn_blocking(move || {
-                                              add_log("Playback started".to_string());
+                                              // add_log("Playback started".to_string());
 
                                               let (_stream, handle) = rodio::OutputStream::try_default()?;
                                               let sink = rodio::Sink::try_new(&handle)?;
-                                              sink.append(rodio::Decoder::new(reader)?);
+
+                                              match reader {
+                                                  Ok(reader) => sink.append(Mp3StreamDecoder::new(reader).unwrap()),
+                                                  Err(_) => {
+                                                      add_log("Failed to start playback".to_string());
+                                                      ()
+                                                  },
+                                              }
                                               sink.sleep_until_end();
 
 
@@ -274,13 +295,13 @@
                                       });
 
                                     if let Err(e) = handle.await {
-                                        app.history.insert(0, format!("{}: Playback error: {}", 
+                                        app.history.insert(0, format!("{}: Playback error: {}",
                                             chrono::Local::now().format("%H:%M:%S"), e));
                                     } else {
                                         app.playback_state = PlaybackState::Playing;
                                         app.history.insert(0, format!("{}: Starting playback of {}",
                                             chrono::Local::now().format("%H:%M:%S"), &station.title));
-                                        app.history.insert(0, format!("{}: Connecting to stream...", 
+                                        app.history.insert(0, format!("{}: Connecting to stream...",
                                             chrono::Local::now().format("%H:%M:%S")));
                                     }
                                   }
