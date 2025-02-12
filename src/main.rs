@@ -231,9 +231,11 @@
                                                          reader,
                                                          icy_headers.metadata_interval(),
                                                          |metadata| {
-                                                             if let Some(title) = metadata.get("StreamTitle") {
-                                                                 let _ = add_log(format!("Now Playing: {}", title));
-                                                             }
+                                                             let _ = add_log(format!("{metadata:#?}\n"));
+
+                                                             // if let Some(title) = metadata.get("StreamTitle") {
+                                                             //     let _ = add_log(format!("Now Playing: {}", title));
+                                                             // }
                                                          }
                                                      ))
                                                  }).await?;
