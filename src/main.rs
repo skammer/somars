@@ -51,6 +51,7 @@
      spinner_frames: Vec<&'static str>,
  }
 
+ #[derive(Clone)]
  enum PlaybackState {
      Playing,
      Paused,
@@ -143,8 +144,7 @@
                      KeyCode::Char('q') => app.should_quit = true,
                      KeyCode::Char('p') => {
                          if let Some(index) = app.selected_station.selected() {
-                             let stations = app.stations.clone();
-                             if let Some(station) = stations.get(index) {
+                             if let Some(station) = app.stations.get(index).cloned() {
                                  if let Some(original_sink) = &app.sink {
                                      // let sink = Arc::clone(sink);
                                      let station_url = station.url.clone();
@@ -246,8 +246,7 @@
                                      });
 
                                      let log_tx_clone = log_tx.clone();
-                                     let app_state = Arc::new(Mutex::new(PlaybackState::Playing));
-                                     let app_state_clone = Arc::clone(&app_state);
+                                     app.playback_state = PlaybackState::Playing;
                                      
                                      tokio::spawn(async move {
                                          let log_tx_clone_2 = log_tx_clone.clone();
@@ -255,9 +254,6 @@
                                              let _ = log_tx_clone_2.send(format!("{}: Playback error: {}",
                                                  chrono::Local::now().format("%H:%M:%S"), e)).await;
 
-                                             if let Ok(mut state) = app_state_clone.lock() {
-                                                 *state = PlaybackState::Playing;
-                                             }
                                              let _ = log_tx_clone_2.send(format!("{}: Starting playback of {}",
                                                  chrono::Local::now().format("%H:%M:%S"), &station.title)).await;
                                              let _ = log_tx_clone_2.send(format!("{}: Connecting to stream...",
@@ -267,10 +263,6 @@
                                                  chrono::Local::now().format("%H:%M:%S"))).await;
                                          }
                                      });
-                                     
-                                     if let Ok(mut state) = app_state.lock() {
-                                         app.playback_state = *state;
-                                     }
 
 
                                  }
