@@ -144,8 +144,8 @@
                                       // Spawn a new task to handle audio playback
                                       let log_tx = log_tx.clone();
 
-                                      let handle = tokio::spawn(async move {
-                                          let log_tx = log_tx.clone();
+                                      let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
+                                          let log_tx = log_tx.clone(); 
                                           let add_log = move |msg: String| {
                                               let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
                                               let log_tx = log_tx.clone();
