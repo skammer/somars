@@ -5,7 +5,6 @@
 
  use stream_download::http::HttpStream;
  use stream_download::http::reqwest::Client;
- use stream_download::source::SourceStream;
  use stream_download::{Settings, StreamDownload};
  use stream_download::storage::bounded::BoundedStorageProvider;
  use stream_download::storage::memory::MemoryStorageProvider;
@@ -37,7 +36,6 @@
   use crate::station::Station;
 
   mod mp3_stream_decoder;
-  use crate::mp3_stream_decoder::Mp3StreamDecoder;
 
 
 
@@ -180,21 +178,13 @@
                                       let sink = original_sink.clone();
                                       let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
 
-                                          let locked_sink = sink.lock().unwrap();
-
-                                          // let log_tx = log_tx.clone();
-
-                                          // let add_log = move |msg: String| {
-                                          //     let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                                          //     let log_tx = log_tx.clone();
-                                          //     async move {
-                                          //         let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
-                                          //     }
-                                          // };
-
-
-                                          println!("333333");
                                           add_log(format!("Async shenanigans for: {}", &station_url)).await;
+                                          
+                                          // Stop any existing playback before starting new stream
+                                          {
+                                              let locked_sink = sink.lock().unwrap();
+                                              locked_sink.stop();
+                                          }
 
                                           // We need to add a header to tell the Icecast server that we can parse the metadata embedded
                                           // within the stream itself.
