@@ -156,14 +156,15 @@
                                                   let mut bytes = Vec::new();
                                                   let mut stream = response.bytes_stream();
 
-                                                  // Get rid of this infinite loop. We don't need loading the full stream before we start the playback. AI!
-                                                  while let Some(chunk) = stream.next().await {
-                                                      if let Ok(chunk) = chunk {
-                                                          bytes.extend_from_slice(&chunk);
+                                                  // Get initial buffer of data to start playback
+                                                  let mut initial_buffer = Vec::new();
+                                                  for _ in 0..10 {  // Get first 10 chunks to start
+                                                      if let Some(Ok(chunk)) = stream.next().await {
+                                                          initial_buffer.extend_from_slice(&chunk);
                                                       }
                                                   }
 
-                                                  let cursor = std::io::Cursor::new(bytes);
+                                                  let cursor = std::io::Cursor::new(initial_buffer);
                                                   match Decoder::new(cursor) {
                                                       Ok(source) => {
                                                           add_log("Created audio decoder, starting playback".to_string()).await;
