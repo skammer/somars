@@ -248,7 +248,7 @@
                                          Ok::<_, Box<dyn Error + Send + Sync>>(())
                                      });
 
-                                     // This blocks the main thread while the handle is running. Make all of it async
+                                     // This blocks the main thread while the handle is running. Make all of it async AI!
                                      if let Err(e) = handle.await {
                                          app.history.insert(0, format!("{}: Playback error: {}",
                                              chrono::Local::now().format("%H:%M:%S"), e));
