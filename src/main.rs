@@ -238,7 +238,8 @@
                                                          move |metadata| {
 
                                                              println!("Title: {:?}", metadata.unwrap().stream_title());
-                                                             let _ = add_log_clone(format!("Now Playing: {}", "LOL"));
+                                                             // add_log_clone is not printing anything AI!
+                                                             let _ = add_log_clone(format!("Now Playing: {:?}", "LOL"));
                                                              println!("\n\nTOOOOOOT\n\n");
 
                                                              // if let Some(title) = metadata.unwrap().stream_title() {
