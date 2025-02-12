@@ -287,7 +287,7 @@
                                                  true
                                              },
                                              Err(_) => {
-                                                 let _ = add_log("Failed to start playback".to_string()).await;
+                                                 let _ = add_log("Failed to start playback".to_string(), MessageType::Error).await;
                                                  false
                                              },
                                          };
