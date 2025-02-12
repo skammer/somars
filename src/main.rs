@@ -231,11 +231,12 @@
                                                          reader,
                                                          icy_headers.metadata_interval(),
                                                          |metadata| {
-                                                             let _ = add_log(format!("{metadata:#?}\n"));
+                                                             // print!("{}[2J", 27 as char);
+                                                             // panic!("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n{metadata:#?}\n");
 
-                                                             // if let Some(title) = metadata.get("StreamTitle") {
-                                                             //     let _ = add_log(format!("Now Playing: {}", title));
-                                                             // }
+                                                             if let Some(title) = metadata.unwrap().stream_title() {
+                                                                 let _ = add_log(format!("Now Playing: {}", title));
+                                                             }
                                                          }
                                                      ))
                                                  }).await?;
