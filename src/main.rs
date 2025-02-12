@@ -254,13 +254,16 @@
                                                  chrono::Local::now().format("%H:%M:%S"), e)).await;
                                          }
                                      });
-                                     } else {
-                                         app.playback_state = PlaybackState::Playing;
-                                         app.history.insert(0, format!("{}: Starting playback of {}",
-                                             chrono::Local::now().format("%H:%M:%S"), &station.title));
-                                         app.history.insert(0, format!("{}: Connecting to stream...",
-                                             chrono::Local::now().format("%H:%M:%S")));
-                                     }
+                                     
+                                     app.playback_state = PlaybackState::Playing;
+                                     app.history.insert(0, format!("{}: Starting playback of {}",
+                                         chrono::Local::now().format("%H:%M:%S"), &station.title));
+                                     app.history.insert(0, format!("{}: Connecting to stream...",
+                                         chrono::Local::now().format("%H:%M:%S")));
+                                 } else {
+                                     app.history.insert(0, format!("{}: No audio sink available",
+                                         chrono::Local::now().format("%H:%M:%S")));
+                                 }
                                  }
                              }
                          }
