@@ -39,12 +39,27 @@
 
 
 
+ #[derive(Clone)]
+ enum MessageType {
+     Error,
+     Info,
+     System,
+     Background,
+     Playback,
+ }
+
+ struct HistoryMessage {
+     message: String,
+     message_type: MessageType,
+     timestamp: String,
+ }
+
  struct App {
      stations: Vec<Station>,
      selected_station: ListState,
      active_station: Option<usize>,
      playback_state: PlaybackState,
-     history: Vec<String>,
+     history: Vec<HistoryMessage>,
      should_quit: bool,
      sink: Option<Arc<Mutex<Sink>>>,
      loading: bool,
@@ -175,17 +190,22 @@
 
                                          let add_log = {
                                              let log_tx_clone = log_tx_clone.clone();
-                                             move |msg: String| {
+                                             move |msg: String, msg_type: MessageType| {
                                                  let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
                                                  let log_tx_clone = log_tx_clone.clone();
                                                  async move {
-                                                     let _ = log_tx_clone.send(format!("{}: {}", timestamp, msg)).await;
+                                                     let history_message = HistoryMessage {
+                                                         message: msg,
+                                                         message_type: msg_type,
+                                                         timestamp,
+                                                     };
+                                                     let _ = log_tx_clone.send(history_message).await;
                                                  }
                                              }
                                          };
 
-                                         add_log(format!("Initializing stream from: {}", &station_url)).await;
-                                         add_log(format!("Async shenanigans for: {}", &station_url)).await;
+                                         add_log(format!("Initializing stream from: {}", &station_url), MessageType::System).await;
+                                         add_log(format!("Async shenanigans for: {}", &station_url), MessageType::Background).await;
 
                                          // We need to add a header to tell the Icecast server that we can parse the metadata embedded
                                          // within the stream itself.
@@ -219,7 +239,7 @@
                                              }
                                          };
 
-                                         add_log("Playback started".to_string());
+                                         add_log("Playback started".to_string(), MessageType::System);
 
                                          add_log(format!("bit rate={:?}\n", icy_headers.bitrate().unwrap()));
 
@@ -253,7 +273,7 @@
                                                      let add_log = add_log.clone();
                                                      async move {
                                                          while let Some(title) = metadata_rx.recv().await {
-                                                             add_log(format!("Now Playing: {}", title)).await;
+                                                             add_log(format!("Now Playing: {}", title), MessageType::Playback).await;
                                                          }
                                                      }
                                                  });
@@ -273,9 +293,9 @@
                                          };
 
                                          if playback_success {
-                                             add_log("Playback started".to_string()).await;
+                                             add_log("Playback started".to_string(), MessageType::System).await;
                                          } else {
-                                             add_log("Failed to lock audio sink".to_string()).await;
+                                             add_log("Failed to lock audio sink".to_string(), MessageType::Error).await;
                                          }
 
                                          Ok::<_, Box<dyn Error + Send + Sync>>(())
@@ -496,11 +516,19 @@
      let history_items: Vec<ListItem> = app
          .history
          .iter()
-         .map(|s| {
+         .map(|msg| {
              let width = right_chunks[2].width as usize;
-             let wrapped_lines: Vec<Line> = textwrap::wrap(s, width.saturating_sub(2))
+             let style = match msg.message_type {
+                 MessageType::Error => Style::default().fg(Color::Red),
+                 MessageType::Info => Style::default().fg(Color::White),
+                 MessageType::System => Style::default().fg(Color::Yellow),
+                 MessageType::Background => Style::default().fg(Color::DarkGray),
+                 MessageType::Playback => Style::default().fg(Color::Green),
+             };
+             let formatted_msg = format!("{}: {}", msg.timestamp, msg.message);
+             let wrapped_lines: Vec<Line> = textwrap::wrap(&formatted_msg, width.saturating_sub(2))
                  .into_iter()
-                 .map(|line| Line::from(Span::styled(line, Style::default())))
+                 .map(|line| Line::from(Span::styled(line, style)))
                  .collect();
              let text = Text::from(wrapped_lines);
              ListItem::new(text)
