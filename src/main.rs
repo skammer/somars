@@ -305,13 +305,14 @@
                          }
                      }
                      KeyCode::Down => {
-                         // This crashes the app if I press Down when the list of tables is still loading. Fix it AI!
-                         if let Some(selected) = app.selected_station.selected() {
-                             if selected < app.stations.len() - 1 {
-                                 app.selected_station.select(Some(selected + 1));
+                         if !app.loading {
+                             if let Some(selected) = app.selected_station.selected() {
+                                 if selected < app.stations.len() - 1 {
+                                     app.selected_station.select(Some(selected + 1));
+                                 }
+                             } else if !app.stations.is_empty() {
+                                 app.selected_station.select(Some(0));
                              }
-                         } else if !app.stations.is_empty() {
-                             app.selected_station.select(Some(0));
                          }
                      }
                      _ => {}
