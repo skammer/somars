@@ -140,7 +140,11 @@
                          app.loading = false;
                      }
                      Err(e) => {
-                         app.history.insert(0, format!("Error loading stations: {}", e));
+                         app.history.insert(0, HistoryMessage {
+                             message: format!("Error loading stations: {}", e),
+                             message_type: MessageType::Error,
+                             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                         });
                          app.loading = false;
                      }
                  }
@@ -230,18 +234,18 @@
 
                                          .await {
                                              Ok(reader) => {
-                                                 add_log("Got response, starting stream...".to_string()).await;
+                                                 add_log("Got response, starting stream...".to_string(), MessageType::Info).await;
                                                  Ok(reader)
                                              },
                                              Err(e) => {
-                                                 add_log(format!("Error: {}", e)).await;
+                                                 add_log(format!("Error: {}", e), MessageType::Error).await;
                                                  Err(e)
                                              }
                                          };
 
                                          add_log("Playback started".to_string(), MessageType::System);
 
-                                         add_log(format!("bit rate={:?}\n", icy_headers.bitrate().unwrap()));
+                                         add_log(format!("bit rate={:?}\n", icy_headers.bitrate().unwrap()), MessageType::Info).await;
 
 
                                          // Start new playback
@@ -307,16 +311,28 @@
                                      tokio::spawn(async move {
                                          let log_tx_clone_2 = log_tx_clone.clone();
                                          if let Err(e) = handle.await {
-                                             let _ = log_tx_clone_2.send(format!("{}: Playback error: {}",
-                                                 chrono::Local::now().format("%H:%M:%S"), e)).await;
+                                             let _ = log_tx_clone_2.send(HistoryMessage {
+                                                 message: format!("Playback error: {}", e),
+                                                 message_type: MessageType::Error,
+                                                 timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                             }).await;
 
-                                             let _ = log_tx_clone_2.send(format!("{}: Starting playback of {}",
-                                                 chrono::Local::now().format("%H:%M:%S"), &station.title)).await;
-                                             let _ = log_tx_clone_2.send(format!("{}: Connecting to stream...",
-                                                 chrono::Local::now().format("%H:%M:%S"))).await;
+                                             let _ = log_tx_clone_2.send(HistoryMessage {
+                                                 message: format!("Starting playback of {}", &station.title),
+                                                 message_type: MessageType::System,
+                                                 timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                             }).await;
+                                             let _ = log_tx_clone_2.send(HistoryMessage {
+                                                 message: "Connecting to stream...".to_string(),
+                                                 message_type: MessageType::System,
+                                                 timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                             }).await;
                                          } else {
-                                             let _ = log_tx_clone_2.send(format!("{}: No audio sink available",
-                                                 chrono::Local::now().format("%H:%M:%S"))).await;
+                                             let _ = log_tx_clone_2.send(HistoryMessage {
+                                                 message: "No audio sink available".to_string(),
+                                                 message_type: MessageType::Error,
+                                                 timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                             }).await;
                                          }
                                      });
 
