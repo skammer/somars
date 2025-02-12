@@ -253,7 +253,7 @@
                                              Ok(reader) => {
 
                                                  // Clone add_log for use in the metadata handler
-                                                 let add_log_clone = add_log.clone();
+                                                 let _add_log_clone = add_log.clone();
 
                                                  // Create a channel for metadata updates
                                                  let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::channel(32);
@@ -542,11 +542,15 @@
                  MessageType::Playback => Style::default().fg(Color::Green),
              };
              let formatted_msg = format!("{}: {}", msg.timestamp, msg.message);
-             let wrapped_lines: Vec<Line> = textwrap::wrap(&formatted_msg, width.saturating_sub(2))
+             let wrapped_lines: Vec<String> = textwrap::wrap(&formatted_msg, width.saturating_sub(2))
+                 .into_iter()
+                 .map(|s| s.to_string())
+                 .collect();
+             let lines: Vec<Line> = wrapped_lines
                  .into_iter()
                  .map(|line| Line::from(Span::styled(line, style)))
                  .collect();
-             let text = Text::from(wrapped_lines);
+             let text = Text::from(lines);
              ListItem::new(text)
          })
          .collect();
