@@ -254,38 +254,19 @@
                                               // Start new playback
                                               let playback_success = match reader {
                                                   Ok(reader) => {
-                                                      println!("7777711111");
+                                                      let decoder = rodio::Decoder::new(IcyMetadataReader::new(
+                                                          reader,
+                                                          icy_headers.metadata_interval(),
+                                                          |_metadata| { /* Handle metadata updates if needed */ }
+                                                      )).unwrap();
+                                                      
+                                                      // Start playback with the new decoder
                                                       {
-
-                                                          // if let Ok(mut sink_guard) = sink.lock() {
-                                                              println!("77777112233");
-                                                              locked_sink.stop();
-                                                              println!("77777112244");
-                                                              let decoder_with_meta = rodio::Decoder::new(IcyMetadataReader::new(
-                                                                  reader,
-                                                                  // Since we requested icy metadata, the metadata interval header should be present in the
-                                                                  // response. This will allow us to parse the metadata within the stream
-                                                                  icy_headers.metadata_interval(),
-                                                                  // Print the stream metadata whenever we receive new values
-                                                                  |metadata| { println!("POOOOK") }
-                                                                  // |metadata| println!("{metadata:#?}\n"),
-
-                                                              ));
-
-                                                              // println!("decoder={:?}\n", decoder_with_meta);
-                                                              println!("77777112255");
-                                                              // sink_guard.append(decoder_with_meta.unwrap());
-                                                              println!("77777112266");
-                                                              // sink_guard.sleep_until_end();
-                                                              println!("7777722222");
-                                                              // sink_guard.play();
-                                                              println!("77777333333");
-
-                                                          true
-                                                      // } else {
-                                                          // false
-                                                      // }
+                                                          let locked_sink = sink.lock().unwrap();
+                                                          locked_sink.append(decoder);
+                                                          locked_sink.play();
                                                       }
+                                                      true
                                                   },
                                                   Err(_) => {
                                                       let _ = add_log("Failed to start playback".to_string()).await;
