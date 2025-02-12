@@ -231,6 +231,9 @@
                                                  // Clone add_log for use in the metadata handler
                                                  let add_log_clone = add_log.clone();
 
+                                                 // Create a channel for metadata updates
+                                                 let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::channel(32);
+                                                
                                                  let decoder = tokio::task::spawn_blocking(move || {
                                                      rodio::Decoder::new_mp3(IcyMetadataReader::new(
                                                          reader,
@@ -238,13 +241,22 @@
                                                          move |metadata| {
                                                              if let Ok(metadata) = metadata {
                                                                  if let Some(title) = metadata.stream_title() {
-                                                                     // I'm getting an error here '<unnamed>' panicked at src/main.rs:241:70: there is no reactor running, must be called from the context of a Tokio 1.x runtime. Fix it AI!
-                                                                     tokio::spawn(add_log_clone(format!("Now Playing: {}", title)));
+                                                                     let _ = metadata_tx.blocking_send(title.to_string());
                                                                  }
                                                              }
                                                          }
                                                      ))
                                                  }).await?;
+
+                                                 // Spawn a task to handle metadata updates
+                                                 tokio::spawn({
+                                                     let add_log = add_log.clone();
+                                                     async move {
+                                                         while let Some(title) = metadata_rx.recv().await {
+                                                             add_log(format!("Now Playing: {}", title)).await;
+                                                         }
+                                                     }
+                                                 });
 
                                                  // Start playback with the new decoder
                                                  {
