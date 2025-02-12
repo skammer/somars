@@ -149,16 +149,20 @@
 
                                           add_log(format!("Fetching stream from: {}", &station_url)).await;
 
+
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
                                                   let mut bytes = Vec::new();
                                                   let mut stream = response.bytes_stream();
+
+                                                  // Get rid of this infinite loop. We don't need loading the full stream before we start the playback. AI!
                                                   while let Some(chunk) = stream.next().await {
                                                       if let Ok(chunk) = chunk {
                                                           bytes.extend_from_slice(&chunk);
                                                       }
                                                   }
+
                                                   let cursor = std::io::Cursor::new(bytes);
                                                   match Decoder::new(cursor) {
                                                       Ok(source) => {
