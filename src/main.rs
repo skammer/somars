@@ -248,10 +248,12 @@
                                          Ok::<_, Box<dyn Error + Send + Sync>>(())
                                      });
 
-                                     // This blocks the main thread while the handle is running. Make all of it async AI!
-                                     if let Err(e) = handle.await {
-                                         app.history.insert(0, format!("{}: Playback error: {}",
-                                             chrono::Local::now().format("%H:%M:%S"), e));
+                                     tokio::spawn(async move {
+                                         if let Err(e) = handle.await {
+                                             let _ = log_tx.send(format!("{}: Playback error: {}", 
+                                                 chrono::Local::now().format("%H:%M:%S"), e)).await;
+                                         }
+                                     });
                                      } else {
                                          app.playback_state = PlaybackState::Playing;
                                          app.history.insert(0, format!("{}: Starting playback of {}",
