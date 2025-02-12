@@ -36,6 +36,7 @@
   use crate::station::Station;
 
   mod mp3_stream_decoder;
+  use crate::mp3_stream_decoder::Mp3StreamDecoder;
 
 
 
@@ -179,12 +180,12 @@
                                       let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
 
                                           add_log(format!("Async shenanigans for: {}", &station_url)).await;
-                                          
+
                                           // Stop any existing playback before starting new stream
-                                          {
-                                              let locked_sink = sink.lock().unwrap();
-                                              locked_sink.stop();
-                                          }
+                                          // {
+                                          //     let locked_sink = sink.lock().unwrap();
+                                          //     locked_sink.stop();
+                                          // }
 
                                           // We need to add a header to tell the Icecast server that we can parse the metadata embedded
                                           // within the stream itself.
@@ -254,17 +255,30 @@
                                               // Start new playback
                                               let playback_success = match reader {
                                                   Ok(reader) => {
-                                                      let decoder = rodio::Decoder::new(IcyMetadataReader::new(
+                                                      println!("777000");
+                                                      // dbg!(icy_headers.metadata_interval());
+                                                      // dbg!(reader);
+                                                      // let decoder = rodio::Decoder::new_mp3(IcyMetadataReader::new(
+                                                      //     reader,
+                                                      //     icy_headers.metadata_interval(),
+                                                      //     |_metadata| { /* Handle metadata updates if needed */ }
+                                                      // ));
+
+                                                      let decoder = Mp3StreamDecoder::new(IcyMetadataReader::new(
                                                           reader,
                                                           icy_headers.metadata_interval(),
                                                           |_metadata| { /* Handle metadata updates if needed */ }
-                                                      )).unwrap();
-                                                      
+                                                      ));
+
+
+                                                      println!("777111");
+
                                                       // Start playback with the new decoder
                                                       {
                                                           let locked_sink = sink.lock().unwrap();
-                                                          locked_sink.append(decoder);
+                                                          // locked_sink.unwrap().stop();
                                                           locked_sink.play();
+                                                          locked_sink.append(decoder?);
                                                       }
                                                       true
                                                   },
