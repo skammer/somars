@@ -149,21 +149,7 @@
                                       // let sink = Arc::clone(sink);
                                       let station_url = station.url.clone();
 
-                                      // Spawn a new task to handle audio playback
-                                      let log_tx = log_tx.clone();
 
-                                      let add_log = move |msg: String| {
-                                          let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                                          let log_tx = log_tx.clone();
-                                          async move {
-                                              let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
-                                          }
-                                      };
-
-
-                                      println!("HELLOW");
-
-                                      add_log(format!("Initializing stream from: {}", &station_url)).await;
 
                                       // Stop any existing playback
                                       // {
@@ -174,11 +160,22 @@
                                       // }
 
 
-                                      println!("222222");
-
                                       let sink = original_sink.clone();
+                                      let log_tx = log_tx.clone();
                                       let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
 
+
+                                          // Spawn a new task to handle audio playback
+
+                                                                                let add_log = move |msg: String| {
+                                                                                    let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+                                                                                    let log_tx = log_tx.clone();
+                                                                                    async move {
+                                                                                        let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
+                                                                                    }
+                                                                                };
+
+                                          add_log(format!("Initializing stream from: {}", &station_url)).await;
                                           add_log(format!("Async shenanigans for: {}", &station_url)).await;
 
                                           // Stop any existing playback before starting new stream
@@ -191,17 +188,14 @@
                                           // within the stream itself.
                                           let client = Client::builder().request_icy_metadata().build()?;
 
-                                          println!("44444");
                                           let stream = HttpStream::new(client, station_url.to_string().parse()?).await?;
                                           // let content_length = stream.content_length();
                                           // let is_infinite = true; // content_length.is_none();
                                           // println!("Infinite stream = {is_infinite}");
 
                                           let icy_headers = IcyHeaders::parse_from_headers(stream.headers());
-                                          println!("Icecast headers: {icy_headers:#?}\n");
-                                          println!("content type={:?}\n", stream.content_type());
-
-                                          println!("55555");
+                                          // println!("Icecast headers: {icy_headers:#?}\n");
+                                          // println!("content type={:?}\n", stream.content_type());
 
                                           // buffer 5 seconds of audio
                                           // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
@@ -235,27 +229,23 @@
                                           };
 
 
-                                          println!("6666");
-
                                           // let reader = match reader {
                                           //     Ok(r) => r,
                                           //     Err(_) => return Ok(()),
                                           // };
 
                                           // let handle = tokio::task::spawn_blocking(move || {
-                                              add_log("Playback started".to_string()).await;
+                                              add_log("Playback started".to_string());
 
-                                              println!("77777");
                                               // let (_stream, handle) = rodio::OutputStream::try_default()?;
                                               // let sink = sink.try_new(&handle)?;
 
-                                              println!("bit rate={:?}\n", icy_headers.bitrate().unwrap());
+                                              add_log(format!("bit rate={:?}\n", icy_headers.bitrate().unwrap()));
 
 
                                               // Start new playback
                                               let playback_success = match reader {
                                                   Ok(reader) => {
-                                                      println!("777000");
                                                       // dbg!(icy_headers.metadata_interval());
                                                       // dbg!(reader);
                                                       // let decoder = rodio::Decoder::new_mp3(IcyMetadataReader::new(
@@ -264,21 +254,32 @@
                                                       //     |_metadata| { /* Handle metadata updates if needed */ }
                                                       // ));
 
-                                                      let decoder = Mp3StreamDecoder::new(IcyMetadataReader::new(
-                                                          reader,
-                                                          icy_headers.metadata_interval(),
-                                                          |_metadata| { /* Handle metadata updates if needed */ }
-                                                      ));
 
+                                                      // let reader_clone = reader.clone();
+                                                      let icy_headers_clone = icy_headers.clone();
+                                                      let sink_clone = sink.clone();
 
-                                                      println!("777111");
+                                                       let decoder = tokio::task::spawn_blocking(move || {
+
+                                                           rodio::Decoder::new_mp3(IcyMetadataReader::new(
+                                                               reader,
+                                                               icy_headers.metadata_interval(),
+                                                               |_metadata| { /* Handle metadata updates if needed */ }
+                                                           ))
+
+                                                           // Mp3StreamDecoder::new(IcyMetadataReader::new(
+                                                           //     reader,
+                                                           //     icy_headers_clone.metadata_interval(),
+                                                           //     |_metadata| { /* Handle metadata updates if needed */ }
+                                                           // ))
+                                                       }).await?;
 
                                                       // Start playback with the new decoder
                                                       {
                                                           let locked_sink = sink.lock().unwrap();
-                                                          // locked_sink.unwrap().stop();
+                                                          locked_sink.stop();
+                                                          locked_sink.append(decoder.unwrap());
                                                           locked_sink.play();
-                                                          locked_sink.append(decoder?);
                                                       }
                                                       true
                                                   },
@@ -289,26 +290,11 @@
                                               };
 
 
-                                              println!("88888");
-
-
-                                              {
-                                                  // if let Ok(sink) = sink.lock() {
-                                                      // sink.stop();
-                                                      // sink.sleep_until_end();
-                                                  // }
-                                              }
-
-
-
-
                                               if playback_success {
                                                   add_log("Playback started".to_string()).await;
                                               } else {
                                                   add_log("Failed to lock audio sink".to_string()).await;
                                               }
-
-                                              println!("99999999");
 
                                               Ok::<_, Box<dyn Error + Send + Sync>>(())
                                           // });
@@ -391,6 +377,7 @@
                           if let Some(sink) = &app.sink {
                               if let Ok(sink) = sink.lock() {
                                   sink.stop();
+                                  sink.empty();
                                   app.playback_state = PlaybackState::Stopped;
                               }
                           }
