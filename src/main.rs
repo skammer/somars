@@ -413,7 +413,7 @@
              Span::styled("[S] Stop", Style::default().fg(Color::Red)),
              Span::raw(" "),
              Span::styled("[Q] Quit", Style::default().fg(Color::Yellow)),
-             Span::raw("  "),
+             Span::raw("  "), // make it so that this Span expands to fill the available width AI!
              if matches!(app.playback_state, PlaybackState::Playing) {
                  Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
              } else {
