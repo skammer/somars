@@ -50,6 +50,8 @@
      loading: bool,
      spinner_state: usize,
      spinner_frames: Vec<&'static str>,
+     playback_frames: Vec<&'static str>,
+     playback_frame_index: usize,
  }
 
  #[derive(Clone)]
@@ -91,6 +93,8 @@
          loading: true,
          spinner_state: 0,
          spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+         playback_frames: vec!["▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮"],
+         playback_frame_index: 0,
      };
 
      // Spawn station fetching task
@@ -138,6 +142,9 @@
          if last_tick.elapsed() >= tick_rate {
              last_tick = Instant::now();
              app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
+             if matches!(app.playback_state, PlaybackState::Playing) {
+                 app.playback_frame_index = (app.playback_frame_index + 1) % app.playback_frames.len();
+             }
          }
 
          if event::poll(timeout)? {
@@ -406,6 +413,12 @@
              Span::styled("[S] Stop", Style::default().fg(Color::Red)),
              Span::raw(" "),
              Span::styled("[Q] Quit", Style::default().fg(Color::Yellow)),
+             Span::raw("  "),
+             if matches!(app.playback_state, PlaybackState::Playing) {
+                 Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
+             } else {
+                 Span::raw("    ")
+             },
          ]),
          Line::from(vec![
              Span::raw("Status: "),
