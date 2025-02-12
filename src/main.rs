@@ -230,6 +230,7 @@
                                                      rodio::Decoder::new_mp3(IcyMetadataReader::new(
                                                          reader,
                                                          icy_headers.metadata_interval(),
+                                                         // When metadata changes, push new song title and author to the history AI!
                                                          |_metadata| { /* Handle metadata updates if needed */ }
                                                      ))
                                                  }).await?;
