@@ -42,6 +42,7 @@
  struct App {
      stations: Vec<Station>,
      selected_station: ListState,
+     active_station: Option<usize>,
      playback_state: PlaybackState,
      history: Vec<String>,
      should_quit: bool,
@@ -82,6 +83,7 @@
      let mut app = App {
          stations: Vec::new(),
          selected_station,
+         active_station: None,
          playback_state: PlaybackState::Stopped,
          history: Vec::new(),
          should_quit: false,
@@ -147,7 +149,7 @@
                              if let Some(station) = app.stations.get(index).cloned() {
                                  if let Some(original_sink) = &app.sink {
 
-                                     // Make is so that pressing P would save currently selected station index as app.active_station  AI!
+                                     app.active_station = Some(index);
 
                                      // let sink = Arc::clone(sink);
                                      let station_url = station.url.clone();
