@@ -1,5 +1,8 @@
  use std::num::NonZeroUsize;
  use std::error::Error;
+
+ use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
+
  use stream_download::http::HttpStream;
  use stream_download::http::reqwest::Client;
  use stream_download::source::SourceStream;
@@ -143,38 +146,91 @@
                       KeyCode::Char('p') => {
                           if let Some(index) = app.selected_station.selected() {
                               if let Some(station) = app.stations.get(index) {
-                                  if let Some(sink) = &app.sink {
-                                      let sink = Arc::clone(sink);
+                                  if let Some(original_sink) = &app.sink {
+                                      // let sink = Arc::clone(sink);
                                       let station_url = station.url.clone();
 
                                       // Spawn a new task to handle audio playback
                                       let log_tx = log_tx.clone();
 
-                                      let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
+                                      let add_log = move |msg: String| {
+                                          let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
                                           let log_tx = log_tx.clone();
-                                          let add_log = move |msg: String| {
-                                              let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                                              let log_tx = log_tx.clone();
-                                              async move {
-                                                  let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
-                                              }
-                                          };
+                                          async move {
+                                              let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
+                                          }
+                                      };
 
-                                          add_log(format!("Fetching stream from: {}", &station_url)).await;
 
-                                          let stream = HttpStream::<Client>::create(station_url.to_string().parse()?).await;
-                                              // let content_length = stream.content_length();
-                                              // let is_infinite = true; // content_length.is_none();
-                                              // println!("Infinite stream = {is_infinite}");
+                                      println!("HELLOW");
+
+                                      add_log(format!("Initializing stream from: {}", &station_url)).await;
+
+                                      // Stop any existing playback
+                                      // {
+                                      //     if let Ok(sink) = sink.lock() {
+                                      //         add_log(format!("Stopping previous stream")).await;
+                                      //         sink.stop();
+                                      //     }
+                                      // }
+
+
+                                      println!("222222");
+
+                                      let sink = original_sink.clone();
+                                      let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
+
+                                          let locked_sink = sink.lock().unwrap();
+
+                                          // let log_tx = log_tx.clone();
+
+                                          // let add_log = move |msg: String| {
+                                          //     let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+                                          //     let log_tx = log_tx.clone();
+                                          //     async move {
+                                          //         let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
+                                          //     }
+                                          // };
+
+
+                                          println!("333333");
+                                          add_log(format!("Async shenanigans for: {}", &station_url)).await;
+
+                                          // We need to add a header to tell the Icecast server that we can parse the metadata embedded
+                                          // within the stream itself.
+                                          let client = Client::builder().request_icy_metadata().build()?;
+
+                                          println!("44444");
+                                          let stream = HttpStream::new(client, station_url.to_string().parse()?).await?;
+                                          // let content_length = stream.content_length();
+                                          // let is_infinite = true; // content_length.is_none();
+                                          // println!("Infinite stream = {is_infinite}");
+
+                                          let icy_headers = IcyHeaders::parse_from_headers(stream.headers());
+                                          println!("Icecast headers: {icy_headers:#?}\n");
+                                          println!("content type={:?}\n", stream.content_type());
+
+                                          println!("55555");
+
+                                          // buffer 5 seconds of audio
+                                          // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
+                                          let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 5;
 
                                           let reader = match StreamDownload::from_stream(
-                                              stream.unwrap(),
+                                              stream,
                                               BoundedStorageProvider::new(
                                                   MemoryStorageProvider,
                                                   NonZeroUsize::new(512 * 1024).unwrap(),
                                               ),
-                                              Settings::default(),
+                                              Settings::default().prefetch_bytes(prefetch_bytes as u64),
                                           )
+
+                                          // .await
+                                          //     {
+                                          //         Ok(reader) => reader,
+                                          //         Err(e) => return Err(e.decode_error().await)?,
+                                          //     };
+
                                           .await {
                                               Ok(reader) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
@@ -187,6 +243,9 @@
                                               }
                                           };
 
+
+                                          println!("6666");
+
                                           // let reader = match reader {
                                           //     Ok(r) => r,
                                           //     Err(_) => return Ok(()),
@@ -195,28 +254,47 @@
                                           // let handle = tokio::task::spawn_blocking(move || {
                                               add_log("Playback started".to_string()).await;
 
+                                              println!("77777");
                                               // let (_stream, handle) = rodio::OutputStream::try_default()?;
                                               // let sink = sink.try_new(&handle)?;
 
-
-                                              // Stop any existing playback
-                                              {
-                                                  if let Ok(_sink) = sink.lock() {
-                                                  // sink.stop();
-                                                  }
-                                              }
-
+                                              println!("bit rate={:?}\n", icy_headers.bitrate().unwrap());
 
 
                                               // Start new playback
                                               let playback_success = match reader {
                                                   Ok(reader) => {
-                                                      if let Ok(mut sink_guard) = sink.lock() {
-                                                          sink_guard.append(Mp3StreamDecoder::new(reader).unwrap());
-                                                          sink_guard.play();
+                                                      println!("7777711111");
+                                                      {
+
+                                                          // if let Ok(mut sink_guard) = sink.lock() {
+                                                              println!("77777112233");
+                                                              locked_sink.stop();
+                                                              println!("77777112244");
+                                                              let decoder_with_meta = rodio::Decoder::new(IcyMetadataReader::new(
+                                                                  reader,
+                                                                  // Since we requested icy metadata, the metadata interval header should be present in the
+                                                                  // response. This will allow us to parse the metadata within the stream
+                                                                  icy_headers.metadata_interval(),
+                                                                  // Print the stream metadata whenever we receive new values
+                                                                  |metadata| { println!("POOOOK") }
+                                                                  // |metadata| println!("{metadata:#?}\n"),
+
+                                                              ));
+
+                                                              // println!("decoder={:?}\n", decoder_with_meta);
+                                                              println!("77777112255");
+                                                              // sink_guard.append(decoder_with_meta.unwrap());
+                                                              println!("77777112266");
+                                                              // sink_guard.sleep_until_end();
+                                                              println!("7777722222");
+                                                              // sink_guard.play();
+                                                              println!("77777333333");
+
                                                           true
-                                                      } else {
-                                                          false
+                                                      // } else {
+                                                          // false
+                                                      // }
                                                       }
                                                   },
                                                   Err(_) => {
@@ -224,6 +302,9 @@
                                                       false
                                                   },
                                               };
+
+
+                                              println!("88888");
 
 
                                               {
@@ -242,6 +323,7 @@
                                                   add_log("Failed to lock audio sink".to_string()).await;
                                               }
 
+                                              println!("99999999");
 
                                               Ok::<_, Box<dyn Error + Send + Sync>>(())
                                           // });
@@ -312,6 +394,10 @@
                                         app.history.insert(0, format!("{}: Connecting to stream...",
                                             chrono::Local::now().format("%H:%M:%S")));
                                     }
+
+
+
+
                                   }
                               }
                           }
