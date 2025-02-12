@@ -5,8 +5,6 @@
   LeaveAlternateScreen},
   };
 
-  use url::Url;
-
   use ratatui::text::{Line, Span, Text};
 
   use ratatui::{
@@ -16,21 +14,16 @@
       widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
       Terminal,
   };
-  use std::error::Error;
   use std::{
       io,
       sync::{Arc, Mutex},
       time::{Duration, Instant}
   };
-  use std::num::NonZeroUsize;
   use rodio::{OutputStream, Sink};
 
   mod station;
   use crate::station::Station;
 
-  use stream_download::storage::bounded::BoundedStorageProvider;
-  use stream_download::storage::memory::MemoryStorageProvider;
-  use stream_download::{Settings, StreamDownload};
 
   struct App {
       stations: Vec<Station>,
@@ -144,7 +137,7 @@
                                       // Spawn a new task to handle audio playback
                                       let log_tx = log_tx.clone();
 
-                                      let handle = tokio::spawn(async move -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+                                      let handle = tokio::spawn(async move {
                                           let log_tx = log_tx.clone();
                                           let add_log = move |msg: String| {
                                               let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
