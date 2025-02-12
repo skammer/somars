@@ -155,7 +155,7 @@
                                      }
 
                                      let sink = original_sink.clone();
-                                     let log_tx = log_tx.clone();
+                                     let log_tx_clone = log_tx.clone();
                                      let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
 
 
@@ -163,9 +163,9 @@
 
                                          let add_log = move |msg: String| {
                                              let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                                             let log_tx = log_tx.clone();
+                                             let log_tx_clone_2 = log_tx_clone.clone();
                                              async move {
-                                                 let _ = log_tx.send(format!("{}: {}", timestamp, msg)).await;
+                                                 let _ = log_tx_clone_2.send(format!("{}: {}", timestamp, msg)).await;
                                              }
                                          };
 
@@ -247,22 +247,25 @@
                                          Ok::<_, Box<dyn Error + Send + Sync>>(())
                                      });
 
+                                     let log_tx_clone = log_tx.clone();
                                      tokio::spawn(async move {
+                                         let log_tx_clone_2 = log_tx_clone.clone();
                                          if let Err(e) = handle.await {
-                                             let _ = log_tx.send(format!("{}: Playback error: {}", 
+                                             let _ = log_tx_clone_2.send(format!("{}: Playback error: {}",
                                                  chrono::Local::now().format("%H:%M:%S"), e)).await;
+
+                                             app.playback_state = PlaybackState::Playing;
+                                             app.history.insert(0, format!("{}: Starting playback of {}",
+                                                 chrono::Local::now().format("%H:%M:%S"), &station.title));
+                                             app.history.insert(0, format!("{}: Connecting to stream...",
+                                                 chrono::Local::now().format("%H:%M:%S")));
+                                         } else {
+                                             app.history.insert(0, format!("{}: No audio sink available",
+                                                 chrono::Local::now().format("%H:%M:%S")));
                                          }
                                      });
-                                     
-                                     app.playback_state = PlaybackState::Playing;
-                                     app.history.insert(0, format!("{}: Starting playback of {}",
-                                         chrono::Local::now().format("%H:%M:%S"), &station.title));
-                                     app.history.insert(0, format!("{}: Connecting to stream...",
-                                         chrono::Local::now().format("%H:%M:%S")));
-                                 } else {
-                                     app.history.insert(0, format!("{}: No audio sink available",
-                                         chrono::Local::now().format("%H:%M:%S")));
-                                 }
+
+
                                  }
                              }
                          }
