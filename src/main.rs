@@ -1,4 +1,3 @@
- use futures_util::StreamExt;
  use crossterm::{
       event::{self, Event, KeyCode},
       execute,
@@ -6,7 +5,7 @@
   LeaveAlternateScreen},
   };
 
-  use url::{Url, ParseError};
+  use url::Url;
 
   use ratatui::text::{Line, Span, Text};
 
@@ -24,7 +23,7 @@
       time::{Duration, Instant}
   };
   use std::num::NonZeroUsize;
-  use rodio::{Decoder, OutputStream, Sink};
+  use rodio::{OutputStream, Sink};
 
   mod station;
   use crate::station::Station;
@@ -158,28 +157,28 @@
 
                                           add_log(format!("Fetching stream from: {}", &station_url)).await;
 
-                                          let mut reader = match StreamDownload::new_http(
+                                          let reader = match StreamDownload::new_http(
                                               Url::parse(&station_url).unwrap(),
-                                              // use bounded storage to keep the underlying size from growing indefinitely
                                               BoundedStorageProvider::new(
-                                                  // you can use any other kind of storage provider here
                                                   MemoryStorageProvider,
-                                                  // be liberal with the buffer size, you need to make sure it holds enough space to
-                                                  // prevent any out-of-bounds reads
                                                   NonZeroUsize::new(512 * 1024).unwrap(),
                                               ),
                                               Settings::default(),
                                           )
-                                          .await
-                                          {
+                                          .await {
                                               Ok(reader) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
-                                                  reader
+                                                  Ok(reader)
                                               },
-                                              Err(e) =>  {
-                                                  add_log(e.decode_error()).await;
-                                                  Ok(())
+                                              Err(e) => {
+                                                  add_log(format!("Error: {}", e)).await;
+                                                  Err(e)
                                               }
+                                          };
+
+                                          let reader = match reader {
+                                              Ok(r) => r,
+                                              Err(_) => return Ok(()),
                                           };
 
                                           let handle = tokio::task::spawn_blocking(move || {
