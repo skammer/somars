@@ -360,7 +360,7 @@
          let station_items: Vec<ListItem> = app
              .stations
              .iter()
-             .map(|s| ListItem::new(s.title.as_str()))
+             .map(|s| ListItem::new(s.title.as_str())) // make it so that currently selected station is highlighted in green and also underlined  AI!
              .collect();
 
          let stations_list = List::new(station_items)
