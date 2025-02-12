@@ -153,7 +153,7 @@
                                           match reqwest::get(&station_url).await {
                                               Ok(response) => {
                                                   add_log("Got response, starting stream...".to_string()).await;
-                                                  let mut bytes = Vec::new();
+                                                  let mut bytes: Vec<u8> = Vec::new();
                                                   let mut stream = response.bytes_stream();
 
                                                   // Get initial buffer of data to start playback
