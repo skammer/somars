@@ -173,11 +173,14 @@
 
                                          // Spawn a new task to handle audio playback
 
-                                         let add_log = move |msg: String| {
-                                             let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                                             let log_tx_clone_2 = log_tx_clone.clone();
-                                             async move {
-                                                 let _ = log_tx_clone_2.send(format!("{}: {}", timestamp, msg)).await;
+                                         let add_log = {
+                                             let log_tx_clone = log_tx_clone.clone();
+                                             move |msg: String| {
+                                                 let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+                                                 let log_tx_clone = log_tx_clone.clone();
+                                                 async move {
+                                                     let _ = log_tx_clone.send(format!("{}: {}", timestamp, msg)).await;
+                                                 }
                                              }
                                          };
 
@@ -225,17 +228,16 @@
                                          let playback_success = match reader {
                                              Ok(reader) => {
 
+                                                 // Clone add_log for use in the metadata handler
+                                                 let add_log_clone = add_log.clone();
+                                         
                                                  let decoder = tokio::task::spawn_blocking(move || {
-
                                                      rodio::Decoder::new_mp3(IcyMetadataReader::new(
                                                          reader,
                                                          icy_headers.metadata_interval(),
-                                                         |metadata| {
-                                                             // print!("{}[2J", 27 as char);
-                                                             // panic!("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n{metadata:#?}\n");
-
+                                                         move |metadata| {
                                                              if let Some(title) = metadata.unwrap().stream_title() {
-                                                                 let _ = add_log(format!("Now Playing: {}", title));
+                                                                 let _ = add_log_clone(format!("Now Playing: {}", title));
                                                              }
                                                          }
                                                      ))
