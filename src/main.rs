@@ -360,12 +360,20 @@
          let station_items: Vec<ListItem> = app
              .stations
              .iter()
-             .map(|s| ListItem::new(s.title.as_str())) // make it so that currently selected station is highlighted in green and also underlined  AI!
+             .enumerate()
+             .map(|(i, s)| {
+                 let style = if Some(i) == app.selected_station.selected() {
+                     Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::UNDERLINED)
+                 } else {
+                     Style::default()
+                 };
+                 ListItem::new(Span::styled(s.title.as_str(), style))
+             })
              .collect();
 
          let stations_list = List::new(station_items)
              .block(Block::default().borders(Borders::ALL).title("Stations"))
-             .highlight_style(Style::default().bg(Color::Blue));
+             .highlight_style(Style::default().bg(Color::Blue).fg(Color::Green).add_modifier(ratatui::style::Modifier::UNDERLINED));
 
          f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
      }
