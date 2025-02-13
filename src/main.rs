@@ -180,6 +180,7 @@
                                      // let sink = Arc::clone(sink);
                                      let station_url = station.url.clone();
                                      let station_title = station.title.clone();
+                                     let station_title_error = station_title.clone();
 
                                      // Stop any existing playback before starting new stream
                                      if let Ok(locked_sink) = original_sink.lock() {
@@ -319,7 +320,7 @@
                                              }).await;
 
                                              let _ = log_tx_clone_2.send(HistoryMessage {
-                                                 message: format!("Starting playback of {}", &station_title),
+                                                 message: format!("Starting playback of {}", &station_title_error),
                                                  message_type: MessageType::System,
                                                  timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                                              }).await;
