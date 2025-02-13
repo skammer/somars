@@ -290,6 +290,7 @@
                                                  {
                                                      let locked_sink = sink.lock().unwrap();
                                                      locked_sink.append(decoder.unwrap());
+                                                     locked_sink.set_volume(app.volume);
                                                      locked_sink.play();
                                                  }
                                                  true
