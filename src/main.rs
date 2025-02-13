@@ -179,6 +179,7 @@
 
                                      // let sink = Arc::clone(sink);
                                      let station_url = station.url.clone();
+                                     let station_title = station.title.clone();
 
                                      // Stop any existing playback before starting new stream
                                      if let Ok(locked_sink) = original_sink.lock() {
@@ -277,7 +278,7 @@
                                                      let add_log = add_log.clone();
                                                      async move {
                                                          while let Some(title) = metadata_rx.recv().await {
-                                                             add_log(format!("{} :: {}", station.title, title), MessageType::Playback).await;
+                                                             add_log(format!("{} :: {}", station_title, title), MessageType::Playback).await;
                                                          }
                                                      }
                                                  });
@@ -318,7 +319,7 @@
                                              }).await;
 
                                              let _ = log_tx_clone_2.send(HistoryMessage {
-                                                 message: format!("Starting playback of {}", &station.title),
+                                                 message: format!("Starting playback of {}", &station_title),
                                                  message_type: MessageType::System,
                                                  timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                                              }).await;
