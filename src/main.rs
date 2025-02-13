@@ -557,7 +557,8 @@
          })
          .collect();
 
-     // Write a comment about this bit of code AI!
+     // Create and render the history list widget which displays timestamped log messages
+     // with color-coded entries for different message types (errors, playback events, etc.)
      let history_list = List::new(history_items)
          .block(Block::default().borders(Borders::ALL).title("History"));
      f.render_widget(history_list, right_chunks[2]);
