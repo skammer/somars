@@ -277,7 +277,7 @@
                                                      let add_log = add_log.clone();
                                                      async move {
                                                          while let Some(title) = metadata_rx.recv().await {
-                                                             add_log(format!("▶ {}", title), MessageType::Playback).await;
+                                                             add_log(format!("{} :: {}", station.title, title), MessageType::Playback).await;
                                                          }
                                                      }
                                                  });
