@@ -107,9 +107,11 @@
          sink: Some(Arc::new(Mutex::new(sink))),
          loading: true,
          spinner_state: 0,
+         volume: 1.0,
          spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
          playback_frames: vec!["▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮"],
          playback_frame_index: 0,
+         volume: f32,
      };
 
      // Spawn station fetching task
@@ -378,6 +380,26 @@
                              app.selected_station.select(Some(0));
                          }
                      }
+                     KeyCode::Char('+') | KeyCode::Char('=') => {
+                         if app.volume < 2.0 {
+                             app.volume += 0.1;
+                             if let Some(sink) = &app.sink {
+                                 if let Ok(sink) = sink.lock() {
+                                     sink.set_volume(app.volume);
+                                 }
+                             }
+                         }
+                     }
+                     KeyCode::Char('-') => {
+                         if app.volume > 0.0 {
+                             app.volume -= 0.1;
+                             if let Some(sink) = &app.sink {
+                                 if let Ok(sink) = sink.lock() {
+                                     sink.set_volume(app.volume);
+                                 }
+                             }
+                         }
+                     }
                      KeyCode::Down => {
                          if !app.loading {
                              if let Some(selected) = app.selected_station.selected() {
@@ -475,7 +497,10 @@
              Span::styled("[S] Stop", Style::default().fg(Color::Red)),
              Span::raw(" "),
              Span::styled("[Q] Quit", Style::default().fg(Color::Yellow)),
-             Span::raw(" ".repeat((right_chunks[0].width as usize).saturating_sub(50))), // 50 is approximate width of other elements
+             Span::raw(" "),
+             Span::styled("[+/-] Volume", Style::default().fg(Color::Cyan)),
+             Span::raw(format!(" ({:.1})", app.volume)),
+             Span::raw(" ".repeat((right_chunks[0].width as usize).saturating_sub(65))), // 65 is approximate width of other elements
              if matches!(app.playback_state, PlaybackState::Playing) {
                  Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
              } else {
