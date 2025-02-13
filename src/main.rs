@@ -112,7 +112,6 @@
          spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
          playback_frames: vec!["▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮"],
          playback_frame_index: 0,
-         volume: f32,
      };
 
      // Spawn station fetching task
