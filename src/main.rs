@@ -67,6 +67,7 @@
      spinner_frames: Vec<&'static str>,
      playback_frames: Vec<&'static str>,
      playback_frame_index: usize,
+     volume: f32,
  }
 
  #[derive(Clone)]
