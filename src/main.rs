@@ -257,7 +257,7 @@
 
                                                  // Create a channel for metadata updates
                                                  let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::channel(32);
-                                                
+
                                                  let decoder = tokio::task::spawn_blocking(move || {
                                                      rodio::Decoder::new_mp3(IcyMetadataReader::new(
                                                          reader,
@@ -277,7 +277,7 @@
                                                      let add_log = add_log.clone();
                                                      async move {
                                                          while let Some(title) = metadata_rx.recv().await {
-                                                             add_log(format!("Now Playing: {}", title), MessageType::Playback).await;
+                                                             add_log(format!("▶ {}", title), MessageType::Playback).await;
                                                          }
                                                      }
                                                  });
