@@ -3,7 +3,8 @@
 
  use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 
- use stream_download::http::HttpStream;
+ use ratatui::style::Stylize;
+use stream_download::http::HttpStream;
  use stream_download::http::reqwest::Client;
  use stream_download::{Settings, StreamDownload};
  use stream_download::storage::bounded::BoundedStorageProvider;
@@ -424,7 +425,7 @@
                      KeyCode::Char('?') => {
                          app.show_help = !app.show_help;
                      }
-                     KeyCode::Char('j') => {
+                     KeyCode::Char('k') => {
                          if !app.history.is_empty() {
                              let i = app.history_scroll_state.selected().unwrap_or(0);
                              if i < app.history.len() - 1 {
@@ -432,7 +433,7 @@
                              }
                          }
                      }
-                     KeyCode::Char('k') => {
+                     KeyCode::Char('j') => {
                          if !app.history.is_empty() {
                              if let Some(i) = app.history_scroll_state.selected() {
                                  if i > 0 {
@@ -692,7 +693,7 @@
              .title(Line::from("[jk]").right_aligned())
              .title_bottom(Line::from(format!("[{} / {}]", selected_history_pos, total_history)).right_aligned())
          )
-         .highlight_style(Style::default().bg(Color::DarkGray));
+         .highlight_style(Style::default().italic().add_modifier(ratatui::style::Modifier::UNDERLINED));
      f.render_stateful_widget(history_list, right_chunks[2], &mut app.history_scroll_state);
 
 
