@@ -10,7 +10,7 @@
  use stream_download::storage::memory::MemoryStorageProvider;
 
  use crossterm::{
-     event::{self, Event, KeyCode},
+     event::{self, Event, KeyCode, MouseEvent, MouseEventKind},
      execute,
      terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
          LeaveAlternateScreen},
@@ -83,7 +83,12 @@
      // Setup terminal
      enable_raw_mode()?;
      let mut stdout = io::stdout();
-     execute!(stdout, EnterAlternateScreen, crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
+     execute!(
+         stdout,
+         EnterAlternateScreen,
+         crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+         crossterm::event::EnableMouseCapture
+     )?;
      let backend = CrosstermBackend::new(stdout);
      let mut terminal = Terminal::new(backend)?;
      terminal.clear()?;
@@ -169,7 +174,8 @@
          }
 
          if event::poll(timeout)? {
-             if let Event::Key(key) = event::read()? {
+             match event::read()? {
+                 Event::Key(key) => {
                  match key.code {
                      KeyCode::Char('q') => app.should_quit = true,
                      KeyCode::Char('p') => {
@@ -414,6 +420,54 @@
                      }
                      _ => {}
                  }
+                 Event::Mouse(MouseEvent { kind: MouseEventKind::Down(event::MouseButton::Left), column, row, ..}) => {
+                     // Check if click is in controls area
+                     if row == 1 { // First row of controls
+                         match column {
+                             2..=3 => { // Play button
+                                 if let Some(index) = app.selected_station.selected() {
+                                     if let Some(station) = app.stations.get(index).cloned() {
+                                         // Existing play logic...
+                                     }
+                                 }
+                             },
+                             11..=16 => { // Pause button
+                                 if let Some(sink) = &app.sink {
+                                     if let Ok(sink) = sink.lock() {
+                                         match app.playback_state {
+                                             PlaybackState::Playing => {
+                                                 sink.pause();
+                                                 app.playback_state = PlaybackState::Paused;
+                                             }
+                                             PlaybackState::Paused => {
+                                                 sink.play();
+                                                 app.playback_state = PlaybackState::Playing;
+                                             }
+                                             PlaybackState::Stopped => {}
+                                         }
+                                     }
+                                 }
+                             },
+                             24..=25 => { // Stop button
+                                 if let Some(sink) = &app.sink {
+                                     if let Ok(sink) = sink.lock() {
+                                         sink.stop();
+                                         sink.empty();
+                                         app.playback_state = PlaybackState::Stopped;
+                                     }
+                                 }
+                             },
+                             33..=34 => { // Quit button
+                                 app.should_quit = true;
+                             },
+                             42..=47 => { // Volume controls
+                                 // Click area for volume controls
+                             },
+                             _ => {}
+                         }
+                     }
+                 }
+                 _ => {}
              }
          }
 
@@ -429,7 +483,11 @@
      }
 
      disable_raw_mode()?;
-     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+     execute!(
+         terminal.backend_mut(),
+         LeaveAlternateScreen,
+         crossterm::event::DisableMouseCapture
+     )?;
      terminal.show_cursor()?;
 
      Ok(())
@@ -502,15 +560,15 @@
      // Controls
      let controls = Paragraph::new(vec![
          Line::from(vec![
-             Span::styled("[P] Play", Style::default().fg(Color::Green)),
+             Span::styled("[ P ]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
-             Span::styled("[Space] Pause", Style::default().fg(Color::Blue)),
+             Span::styled("[ Space ]", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
-             Span::styled("[S] Stop", Style::default().fg(Color::Red)),
+             Span::styled("[ S ]", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
-             Span::styled("[Q] Quit", Style::default().fg(Color::Yellow)),
+             Span::styled("[ Q ]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
-             Span::styled("[+/-] Volume", Style::default().fg(Color::Cyan)),
+             Span::styled("[ +/- ]", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(format!(" ({:.1})", app.volume)),
              Span::raw(" ".repeat((right_chunks[0].width as usize).saturating_sub(65))), // 65 is approximate width of other elements
              if matches!(app.playback_state, PlaybackState::Playing) {
