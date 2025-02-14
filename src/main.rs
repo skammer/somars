@@ -682,11 +682,14 @@
          })
          .collect();
 
+     let selected_history_pos = app.history_scroll_state.selected().unwrap_or(0) + 1;
+     let total_history = app.history.len();
      let history_list = List::new(history_items)
          .block(Block::default()
              .borders(Borders::ALL)
              .title("History")
              .title(Line::from("[jk]").right_aligned())
+             .title_bottom(Line::from(format!("[{} / {}]", selected_history_pos, total_history)).right_aligned())
          )
          .highlight_style(Style::default().bg(Color::DarkGray));
      f.render_stateful_widget(history_list, right_chunks[2], &mut app.history_scroll_state);
