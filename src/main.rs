@@ -175,8 +175,7 @@
 
          if event::poll(timeout)? {
              match event::read()? {
-                 Event::Key(key) => {
-                 match key.code {
+                 Event::Key(key) => match key.code {
                      KeyCode::Char('q') => app.should_quit = true,
                      KeyCode::Char('p') => {
                          if let Some(index) = app.selected_station.selected() {
@@ -419,7 +418,7 @@
                          }
                      }
                      _ => {}
-                 }
+                 },
                  Event::Mouse(MouseEvent { kind: MouseEventKind::Down(event::MouseButton::Left), column, row, ..}) => {
                      // Check if click is in controls area
                      if row == 1 { // First row of controls
