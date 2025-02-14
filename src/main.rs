@@ -259,7 +259,7 @@ use stream_download::http::HttpStream;
 
                                          add_log("Playback started".to_string(), MessageType::System);
 
-                                         add_log(format!("bit rate={:?}\n", icy_headers.bitrate().unwrap()), MessageType::Info).await;
+                                         add_log(format!("bit rate {:?}kbps", icy_headers.bitrate().unwrap()), MessageType::Info).await;
 
 
                                          // Start new playback
@@ -670,7 +670,7 @@ use stream_download::http::HttpStream;
                  MessageType::Background => Style::default().fg(Color::DarkGray),
                  MessageType::Playback => Style::default().fg(Color::Green),
              };
-             let formatted_msg = format!("{}: {}", msg.timestamp, msg.message);
+             let formatted_msg = format!("{}| {}", msg.timestamp, msg.message);
              let wrapped_lines: Vec<String> = textwrap::wrap(&formatted_msg, width.saturating_sub(2))
                  .into_iter()
                  .map(|s| s.to_string())
