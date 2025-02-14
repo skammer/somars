@@ -538,7 +538,7 @@
              Line::from("Press any key to close this help screen"),
          ];
 
-         let area = ratatui::layout::centered_rect(60, 60, f.size());
+         let area = centered_rect(60, 60, f.area());
          let help_widget = Paragraph::new(help_text)
              .block(Block::default()
                  .title("Help")
@@ -554,7 +554,7 @@
      let chunks = Layout::default()
          .direction(Direction::Horizontal)
          .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-         .split(f.size());
+         .split(f.area());
 
      // Left panel - Station list or loading indicator
      if app.loading {
