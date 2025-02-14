@@ -151,7 +151,7 @@
                          app.loading = false;
                      }
                      Err(e) => {
-                         app.history.insert(0, HistoryMessage {
+                         app.history.push(HistoryMessage {
                              message: format!("Error loading stations: {}", e),
                              message_type: MessageType::Error,
                              timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -166,7 +166,7 @@
 
          // Check for log messages
          while let Ok(log_msg) = log_rx.try_recv() {
-             app.history.insert(0, log_msg);
+             app.history.push(log_msg);
          }
 
          if last_tick.elapsed() >= tick_rate {
@@ -659,6 +659,7 @@
      let history_items: Vec<ListItem> = app
          .history
          .iter()
+         .rev()
          .map(|msg| {
              let width = right_chunks[2].width as usize;
              let style = match msg.message_type {
