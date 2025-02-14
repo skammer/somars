@@ -473,12 +473,15 @@
          let stations_list = List::new(station_items)
              .block(
                  Block::bordered()
-                 // Block::default()
-                 // .borders(Borders::ALL)
                  .title(Line::from(format!("Stations")))
-                 .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)))
+                 .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)).right_aligned())
              )
-             .highlight_style(Style::default().bg(Color::Blue));
+             // .highlight_style(Style::default())
+             // .highlight_symbol(">>")
+             .repeat_highlight_symbol(true)
+             .highlight_style(Style::default().bg(Color::Blue))
+         ;
+
 
          f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
      }
@@ -489,8 +492,8 @@
          .constraints(
              [
                  Constraint::Length(3), // Controls
-                 Constraint::Percentage(30), // Now Playing
-                 Constraint::Percentage(60), // History
+                 Constraint::Length(10), // Now Playing
+                 Constraint::Fill(1), // History
                  ]
                  .as_ref(),
          )
