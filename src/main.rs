@@ -536,6 +536,7 @@
              .block(
                  Block::bordered()
                      .title(Line::from(format!("Stations")))
+                     .title(Line::from("[↓↑]").right_aligned())
                      .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)).right_aligned())
              )
              // .highlight_style(Style::default())
@@ -661,7 +662,11 @@
          .collect();
 
      let history_list = List::new(history_items)
-         .block(Block::default().borders(Borders::ALL).title("History"));
+         .block(Block::default()
+             .borders(Borders::ALL)
+             .title("History")
+             .title(Line::from("[jk]").right_aligned())
+         );
      f.render_widget(history_list, right_chunks[2]);
 
 
