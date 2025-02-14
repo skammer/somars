@@ -559,22 +559,16 @@
      // Controls
      let controls = Paragraph::new(vec![
          Line::from(vec![
-             Span::styled("[ P ]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::styled("Play [p]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
-             Span::styled("[ Space ]", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::styled("Pause [space]", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
-             Span::styled("[ S ]", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::styled("Stop [s]", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
-             Span::styled("[ Q ]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::styled("Quit [q]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
-             Span::styled("[ +/- ]", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::styled("Volume [+/-]", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(format!(" ({:.1})", app.volume)),
-             Span::raw(" ".repeat((right_chunks[0].width as usize).saturating_sub(65))), // 65 is approximate width of other elements
-             if matches!(app.playback_state, PlaybackState::Playing) {
-                 Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
-             } else {
-                 Span::raw("    ")
-             },
          ]),
          Line::from(vec![
              Span::raw("Status: "),
@@ -592,7 +586,17 @@
              ),
          ]),
      ])
-     .block(Block::default().borders(Borders::ALL).title("Controls"));
+     .block(Block::default()
+         .borders(Borders::ALL)
+         .title("Controls")
+        .title(Line::from(vec![
+            if matches!(app.playback_state, PlaybackState::Playing) {
+                Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
+            } else {
+                Span::raw("")
+            },
+        ]).right_aligned())
+     );
      f.render_widget(controls, right_chunks[0]);
 
      // Now Playing
