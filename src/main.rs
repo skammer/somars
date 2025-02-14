@@ -60,6 +60,7 @@
      active_station: Option<usize>,
      playback_state: PlaybackState,
      history: Vec<HistoryMessage>,
+     history_scroll_state: ListState,
      should_quit: bool,
      sink: Option<Arc<Mutex<Sink>>>,
      loading: bool,
@@ -110,6 +111,7 @@
          active_station: None,
          playback_state: PlaybackState::Stopped,
          history: Vec::new(),
+         history_scroll_state: ListState::default(),
          should_quit: false,
          sink: Some(Arc::new(Mutex::new(sink))),
          loading: true,
@@ -422,6 +424,25 @@
                      KeyCode::Char('?') => {
                          app.show_help = !app.show_help;
                      }
+                     KeyCode::Char('j') => {
+                         if !app.history.is_empty() {
+                             let i = app.history_scroll_state.selected().unwrap_or(0);
+                             if i < app.history.len() - 1 {
+                                 app.history_scroll_state.select(Some(i + 1));
+                             }
+                         }
+                     }
+                     KeyCode::Char('k') => {
+                         if !app.history.is_empty() {
+                             if let Some(i) = app.history_scroll_state.selected() {
+                                 if i > 0 {
+                                     app.history_scroll_state.select(Some(i - 1));
+                                 }
+                             } else {
+                                 app.history_scroll_state.select(Some(0));
+                             }
+                         }
+                     }
                      _ => {}
                  },
                  Event::Mouse(MouseEvent { kind: MouseEventKind::Down(event::MouseButton::Left), column, row, ..}) => {
@@ -666,8 +687,9 @@
              .borders(Borders::ALL)
              .title("History")
              .title(Line::from("[jk]").right_aligned())
-         );
-     f.render_widget(history_list, right_chunks[2]);
+         )
+         .highlight_style(Style::default().bg(Color::DarkGray));
+     f.render_stateful_widget(history_list, right_chunks[2], &mut app.history_scroll_state);
 
 
      if app.show_help {
