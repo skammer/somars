@@ -20,7 +20,7 @@
 
  use ratatui::{
      backend::CrosstermBackend,
-     layout::{Constraint, Direction, Layout},
+     layout::{Constraint, Direction, Layout, Flex, Rect},
      style::{Color, Style},
      widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
      Terminal,
@@ -498,59 +498,6 @@
  }
 
  fn ui(f: &mut ratatui::Frame, app: &mut App) {
-     if app.show_help {
-         let help_text = vec![
-             Line::from(vec![
-                 Span::styled("SomaRS - SomaFM Terminal Client", Style::default().add_modifier(ratatui::style::Modifier::BOLD))
-             ]),
-             Line::from(""),
-             Line::from("Keyboard Controls:"),
-             Line::from(""),
-             Line::from(vec![
-                 Span::styled("p", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Play selected station")
-             ]),
-             Line::from(vec![
-                 Span::styled("Space", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Pause/Resume playback")
-             ]),
-             Line::from(vec![
-                 Span::styled("s", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Stop playback")
-             ]),
-             Line::from(vec![
-                 Span::styled("+/-", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Adjust volume")
-             ]),
-             Line::from(vec![
-                 Span::styled("↑/↓", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Navigate stations")
-             ]),
-             Line::from(vec![
-                 Span::styled("q", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Quit application")
-             ]),
-             Line::from(vec![
-                 Span::styled("?", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Toggle this help screen")
-             ]),
-             Line::from(""),
-             Line::from("Press any key to close this help screen"),
-         ];
-
-         let area = centered_rect(60, 60, f.area());
-         let help_widget = Paragraph::new(help_text)
-             .block(Block::default()
-                 .title("Help")
-                 .borders(Borders::ALL)
-                 .border_type(ratatui::widgets::BorderType::Double))
-             .alignment(ratatui::layout::Alignment::Left)
-             .wrap(ratatui::widgets::Wrap { trim: true });
-        
-         f.render_widget(ratatui::widgets::Clear, area);
-         f.render_widget(help_widget, area);
-         return;
-     }
      let chunks = Layout::default()
          .direction(Direction::Horizontal)
          .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
@@ -588,8 +535,8 @@
          let stations_list = List::new(station_items)
              .block(
                  Block::bordered()
-                 .title(Line::from(format!("Stations")))
-                 .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)).right_aligned())
+                     .title(Line::from(format!("Stations")))
+                     .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)).right_aligned())
              )
              // .highlight_style(Style::default())
              // .highlight_symbol(">>")
@@ -647,13 +594,13 @@
      .block(Block::default()
          .borders(Borders::ALL)
          .title("Controls")
-        .title(Line::from(vec![
-            if matches!(app.playback_state, PlaybackState::Playing) {
-                Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
-            } else {
-                Span::raw("")
-            },
-        ]).right_aligned())
+         .title(Line::from(vec![
+             if matches!(app.playback_state, PlaybackState::Playing) {
+                 Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
+             } else {
+                 Span::raw("")
+             },
+         ]).right_aligned())
      );
      f.render_widget(controls, right_chunks[0]);
 
@@ -716,24 +663,69 @@
      let history_list = List::new(history_items)
          .block(Block::default().borders(Borders::ALL).title("History"));
      f.render_widget(history_list, right_chunks[2]);
- }
-/// helper function to create a centered rect using up certain percentage of the available rect `r`
-fn centered_rect(percent_x: u16, percent_y: u16, r: ratatui::layout::Rect) -> ratatui::layout::Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
 
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
+
+     if app.show_help {
+         let help_text = vec![
+             Line::from(vec![
+                 Span::styled("SomaRS - SomaFM Terminal Client", Style::default().add_modifier(ratatui::style::Modifier::BOLD))
+             ]),
+             Line::from(""),
+             Line::from("Keyboard Controls:"),
+             Line::from(""),
+             Line::from(vec![
+                 Span::styled("p", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Play selected station")
+             ]),
+             Line::from(vec![
+                 Span::styled("Space", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Pause/Resume playback")
+             ]),
+             Line::from(vec![
+                 Span::styled("s", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Stop playback")
+             ]),
+             Line::from(vec![
+                 Span::styled("+/-", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Adjust volume")
+             ]),
+             Line::from(vec![
+                 Span::styled("↑/↓", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Navigate stations")
+             ]),
+             Line::from(vec![
+                 Span::styled("q", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Quit application")
+             ]),
+             Line::from(vec![
+                 Span::styled("?", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Toggle this help screen")
+             ]),
+             Line::from(""),
+             Line::from("Press ? to close this help screen"),
+         ];
+
+         let area = popup_area(f.area(), 60, 60);
+         let help_widget = Paragraph::new(help_text)
+             .block(Block::default()
+                 .title("Help")
+                 .title_bottom(Line::from("somars v0.0.1").right_aligned())
+                 .borders(Borders::ALL)
+                 .border_type(ratatui::widgets::BorderType::Double))
+             .alignment(ratatui::layout::Alignment::Left)
+             .wrap(ratatui::widgets::Wrap { trim: true });
+
+         f.render_widget(ratatui::widgets::Clear, area);
+         f.render_widget(help_widget, area);
+     }
+
+ }
+
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
+    let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+    let [area] = vertical.areas(area);
+    let [area] = horizontal.areas(area);
+    area
 }
