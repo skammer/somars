@@ -68,6 +68,7 @@
      playback_frames: Vec<&'static str>,
      playback_frame_index: usize,
      volume: f32,
+     show_help: bool,
  }
 
  #[derive(Clone)]
@@ -117,6 +118,7 @@
          spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
          playback_frames: vec!["▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮"],
          playback_frame_index: 0,
+         show_help: false,
      };
 
      // Spawn station fetching task
@@ -417,6 +419,9 @@
                              }
                          }
                      }
+                     KeyCode::Char('?') => {
+                         app.show_help = !app.show_help;
+                     }
                      _ => {}
                  },
                  Event::Mouse(MouseEvent { kind: MouseEventKind::Down(event::MouseButton::Left), column, row, ..}) => {
@@ -493,6 +498,59 @@
  }
 
  fn ui(f: &mut ratatui::Frame, app: &mut App) {
+     if app.show_help {
+         let help_text = vec![
+             Line::from(vec![
+                 Span::styled("SomaRS - SomaFM Terminal Client", Style::default().add_modifier(ratatui::style::Modifier::BOLD))
+             ]),
+             Line::from(""),
+             Line::from("Keyboard Controls:"),
+             Line::from(""),
+             Line::from(vec![
+                 Span::styled("p", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Play selected station")
+             ]),
+             Line::from(vec![
+                 Span::styled("Space", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Pause/Resume playback")
+             ]),
+             Line::from(vec![
+                 Span::styled("s", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Stop playback")
+             ]),
+             Line::from(vec![
+                 Span::styled("+/-", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Adjust volume")
+             ]),
+             Line::from(vec![
+                 Span::styled("↑/↓", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Navigate stations")
+             ]),
+             Line::from(vec![
+                 Span::styled("q", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Quit application")
+             ]),
+             Line::from(vec![
+                 Span::styled("?", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Toggle this help screen")
+             ]),
+             Line::from(""),
+             Line::from("Press any key to close this help screen"),
+         ];
+
+         let area = ratatui::layout::centered_rect(60, 60, f.size());
+         let help_widget = Paragraph::new(help_text)
+             .block(Block::default()
+                 .title("Help")
+                 .borders(Borders::ALL)
+                 .border_type(ratatui::widgets::BorderType::Double))
+             .alignment(ratatui::layout::Alignment::Left)
+             .wrap(ratatui::widgets::Wrap { trim: true });
+        
+         f.render_widget(ratatui::widgets::Clear, area);
+         f.render_widget(help_widget, area);
+         return;
+     }
      let chunks = Layout::default()
          .direction(Direction::Horizontal)
          .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
@@ -659,3 +717,23 @@
          .block(Block::default().borders(Borders::ALL).title("History"));
      f.render_widget(history_list, right_chunks[2]);
  }
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn centered_rect(percent_x: u16, percent_y: u16, r: ratatui::layout::Rect) -> ratatui::layout::Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
