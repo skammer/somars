@@ -22,7 +22,7 @@
      backend::CrosstermBackend,
      layout::{Constraint, Direction, Layout, Flex, Rect},
      style::{Color, Style},
-     widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
+     widgets::{Block, Borders, List, ListItem, Paragraph, ListState, ListDirection},
      Terminal,
  };
  use std::{
@@ -685,7 +685,7 @@
 
      let selected_history_pos = app.history_scroll_state.selected().unwrap_or(0) + 1;
      let total_history = app.history.len();
-     let history_list = List::new(history_items)
+     let history_list = List::new(history_items).direction(ListDirection::BottomToTop)
          .block(Block::default()
              .borders(Borders::ALL)
              .title("History")
