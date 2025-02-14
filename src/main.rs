@@ -553,7 +553,7 @@
      } else {
          Paragraph::new(vec![Line::from("No station selected")])
      }
-     .block(Block::default().borders(Borders::ALL).title("Now Playing"));
+     .block(Block::default().borders(Borders::ALL).title("Details"));
      f.render_widget(now_playing, right_chunks[1]);
 
      // History
