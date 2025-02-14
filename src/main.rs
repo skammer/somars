@@ -435,7 +435,7 @@
      Ok(())
  }
 
- fn ui<B: ratatui::backend::Backend>(f: &mut ratatui::Frame<B>, app: &mut App) {
+ fn ui(f: &mut ratatui::Frame, app: &mut App) {
      let chunks = Layout::default()
          .direction(Direction::Horizontal)
          .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
