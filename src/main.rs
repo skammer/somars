@@ -471,9 +471,13 @@
          let selected_pos = app.selected_station.selected().unwrap_or(0) + 1;
          let total_stations = app.stations.len();
          let stations_list = List::new(station_items)
-             .block(Block::default().borders(Borders::ALL).title(
-                 format!("Stations [{} / {}]", selected_pos, total_stations)
-             ))
+             .block(
+                 Block::bordered()
+                 // Block::default()
+                 // .borders(Borders::ALL)
+                 .title(Line::from(format!("Stations")))
+                 .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)))
+             )
              .highlight_style(Style::default().bg(Color::Blue));
 
          f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
