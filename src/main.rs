@@ -164,8 +164,7 @@
                          app.loading = false;
                      }
                      Err(e) => {
-                         if app.log_level > 1 || !matches!(msg.message_type, MessageType::System) {
-                             app.history.push(HistoryMessage {
+                         app.history.push(HistoryMessage {
                              message: format!("Error loading stations: {}", e),
                              message_type: MessageType::Error,
                              timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -236,8 +235,6 @@
                                          };
 
                                          add_log(format!("Initializing stream from: {}", &station_url), MessageType::System).await;
-                                         add_log(format!("Async shenanigans for: {}", &station_url), MessageType::Background).await;
-
                                          // We need to add a header to tell the Icecast server that we can parse the metadata embedded
                                          // within the stream itself.
                                          let client = Client::builder().request_icy_metadata().build()?;
@@ -261,7 +258,7 @@
 
                                          .await {
                                              Ok(reader) => {
-                                                 add_log("Got response, starting stream...".to_string(), MessageType::Info).await;
+                                                 add_log("Got response, starting stream...".to_string(), MessageType::Background).await;
                                                  Ok(reader)
                                              },
                                              Err(e) => {
@@ -270,9 +267,7 @@
                                              }
                                          };
 
-                                         add_log("Playback started".to_string(), MessageType::System);
-
-                                         add_log(format!("bit rate {:?}kbps", icy_headers.bitrate().unwrap()), MessageType::Info).await;
+                                         add_log(format!("Bit rate: {:?}kbps", icy_headers.bitrate().unwrap()), MessageType::Info).await;
 
 
                                          // Start new playback
@@ -344,7 +339,7 @@
                                                  message_type: MessageType::Error,
                                                  timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                                              }).await;
-
+                                         } else {
                                              let _ = log_tx_clone_2.send(HistoryMessage {
                                                  message: format!("Starting playback of {}", &station_title_error),
                                                  message_type: MessageType::System,
@@ -353,12 +348,6 @@
                                              let _ = log_tx_clone_2.send(HistoryMessage {
                                                  message: "Connecting to stream...".to_string(),
                                                  message_type: MessageType::System,
-                                                 timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                             }).await;
-                                         } else {
-                                             let _ = log_tx_clone_2.send(HistoryMessage {
-                                                 message: "No audio sink available".to_string(),
-                                                 message_type: MessageType::Error,
                                                  timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                                              }).await;
                                          }
@@ -674,6 +663,7 @@
          .history
          .iter()
          .rev()
+         .filter(|msg| app.log_level > 1 || matches!(msg.message_type, MessageType::Error) || matches!(msg.message_type, MessageType::Playback))
          .map(|msg| {
              let width = right_chunks[2].width as usize;
              let style = match msg.message_type {
