@@ -4,7 +4,7 @@
  use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 
  use ratatui::style::Stylize;
-use stream_download::http::HttpStream;
+ use stream_download::http::HttpStream;
  use stream_download::http::reqwest::Client;
  use stream_download::{Settings, StreamDownload};
  use stream_download::storage::bounded::BoundedStorageProvider;
