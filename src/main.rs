@@ -1,5 +1,6 @@
  use std::num::NonZeroUsize;
  use std::error::Error;
+ use clap::Parser;
 
  use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 
@@ -55,6 +56,14 @@
      timestamp: String,
  }
 
+ #[derive(Parser)]
+ #[command(version, about)]
+ struct Cli {
+     /// Log level (1=minimal, 2=verbose)
+     #[arg(short, long, default_value_t = 1)]
+     log_level: u8,
+ }
+
  struct App {
      stations: Vec<Station>,
      selected_station: ListState,
@@ -71,6 +80,7 @@
      playback_frame_index: usize,
      volume: f32,
      show_help: bool,
+     log_level: u8,
  }
 
  #[derive(Clone)]
@@ -82,6 +92,7 @@
 
  #[tokio::main]
  async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+     let cli = Cli::parse();
      use ratatui::widgets::ListState;
      // Setup terminal
      enable_raw_mode()?;
@@ -122,6 +133,7 @@
          playback_frames: vec!["▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮"],
          playback_frame_index: 0,
          show_help: false,
+         log_level: cli.log_level,
      };
 
      // Spawn station fetching task
@@ -152,7 +164,8 @@
                          app.loading = false;
                      }
                      Err(e) => {
-                         app.history.push(HistoryMessage {
+                         if app.log_level > 1 || !matches!(msg.message_type, MessageType::System) {
+                             app.history.push(HistoryMessage {
                              message: format!("Error loading stations: {}", e),
                              message_type: MessageType::Error,
                              timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
