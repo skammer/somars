@@ -1,6 +1,5 @@
 use crate::{App, MessageType, PlaybackState, HistoryMessage};
 use crossterm::event::KeyCode;
-use std::sync::{Arc, Mutex};
 use stream_download::http::reqwest::Client as StreamClient;
 use icy_metadata::RequestIcyMetadata;
 use tokio::sync::mpsc::Sender;
@@ -10,7 +9,7 @@ pub fn handle_key_event(
     key: KeyCode, 
     app: &mut App, 
     log_tx: &Sender<HistoryMessage>,
-    last_tick: &mut Instant
+    _last_tick: &mut Instant
 ) -> bool {
     match key {
         KeyCode::Char('q') => {
@@ -77,6 +76,7 @@ fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                 let station_url = station.url.clone();
                 let station_title = station.title.clone();
                 let station_title_error = station_title.clone();
+                let volume = app.volume;
 
                 let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
                     // Spawn a new task to handle audio playback
@@ -167,7 +167,7 @@ fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                             {
                                 let locked_sink = sink.lock().unwrap();
                                 locked_sink.append(decoder.unwrap());
-                                locked_sink.set_volume(app.volume);
+                                locked_sink.set_volume(volume);
                                 locked_sink.play();
                             }
                             true

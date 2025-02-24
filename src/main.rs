@@ -192,7 +192,7 @@ pub enum PlaybackState {
                          match column {
                              2..=3 => { // Play button
                                  if let Some(index) = app.selected_station.selected() {
-                                     if let Some(station) = app.stations.get(index).cloned() {
+                                     if let Some(_station) = app.stations.get(index).cloned() {
                                          // Existing play logic...
                                      }
                                  }
