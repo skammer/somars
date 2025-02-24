@@ -1,94 +1,95 @@
- use std::num::NonZeroUsize;
- use std::error::Error;
- use clap::Parser;
+use std::num::NonZeroUsize;
+use std::error::Error;
+use clap::Parser;
 
- use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
+use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 
- use ratatui::style::Stylize;
- use stream_download::http::HttpStream;
- use stream_download::http::reqwest::Client;
- use stream_download::{Settings, StreamDownload};
- use stream_download::storage::bounded::BoundedStorageProvider;
- use stream_download::storage::memory::MemoryStorageProvider;
+use ratatui::style::Stylize;
+use stream_download::http::HttpStream;
+use stream_download::http::reqwest::Client;
+use stream_download::{Settings, StreamDownload};
+use stream_download::storage::bounded::BoundedStorageProvider;
+use stream_download::storage::memory::MemoryStorageProvider;
 
- use crossterm::{
-     event::{self, Event, KeyCode, MouseEvent, MouseEventKind},
-     execute,
-     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
-         LeaveAlternateScreen},
- };
+use crossterm::{
+    event::{self, Event, KeyCode, MouseEvent, MouseEventKind},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
+        LeaveAlternateScreen},
+};
 
- use ratatui::text::{Line, Span, Text};
+use ratatui::text::{Line, Span, Text};
 
- use ratatui::{
-     backend::CrosstermBackend,
-     layout::{Constraint, Direction, Layout, Flex, Rect},
-     style::{Color, Style},
-     widgets::{Block, Borders, List, ListItem, Paragraph, ListState, ListDirection},
-     Terminal,
- };
- use std::{
-     io,
-     sync::{Arc, Mutex},
-     time::{Duration, Instant}
- };
- use rodio::{OutputStream, Sink};
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout, Flex, Rect},
+    style::{Color, Style},
+    widgets::{Block, Borders, List, ListItem, Paragraph, ListState, ListDirection},
+    Terminal,
+};
+use std::{
+    io,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant}
+};
+use rodio::{OutputStream, Sink};
 
- mod station;
- use crate::station::Station;
+mod station;
+use crate::station::Station;
 
- mod mp3_stream_decoder;
+mod mp3_stream_decoder;
+mod keyboard;
 
 
 
- #[derive(Clone)]
- enum MessageType {
-     Error,
-     Info,
-     System,
-     Background,
-     Playback,
- }
+#[derive(Clone)]
+pub enum MessageType {
+    Error,
+    Info,
+    System,
+    Background,
+    Playback,
+}
 
- struct HistoryMessage {
-     message: String,
-     message_type: MessageType,
-     timestamp: String,
- }
+pub struct HistoryMessage {
+    pub message: String,
+    pub message_type: MessageType,
+    pub timestamp: String,
+}
 
- #[derive(Parser)]
- #[command(version, about)]
- struct Cli {
-     /// Log level (1=minimal, 2=verbose)
-     #[arg(short, long, default_value_t = 1)]
-     log_level: u8,
- }
+#[derive(Parser)]
+#[command(version, about)]
+struct Cli {
+    /// Log level (1=minimal, 2=verbose)
+    #[arg(short, long, default_value_t = 1)]
+    log_level: u8,
+}
 
- struct App {
-     stations: Vec<Station>,
-     selected_station: ListState,
-     active_station: Option<usize>,
-     playback_state: PlaybackState,
-     history: Vec<HistoryMessage>,
-     history_scroll_state: ListState,
-     should_quit: bool,
-     sink: Option<Arc<Mutex<Sink>>>,
-     loading: bool,
-     spinner_state: usize,
-     spinner_frames: Vec<&'static str>,
-     playback_frames: Vec<&'static str>,
-     playback_frame_index: usize,
-     volume: f32,
-     show_help: bool,
-     log_level: u8,
- }
+pub struct App {
+    pub stations: Vec<Station>,
+    pub selected_station: ListState,
+    pub active_station: Option<usize>,
+    pub playback_state: PlaybackState,
+    pub history: Vec<HistoryMessage>,
+    pub history_scroll_state: ListState,
+    pub should_quit: bool,
+    pub sink: Option<Arc<Mutex<Sink>>>,
+    pub loading: bool,
+    pub spinner_state: usize,
+    pub spinner_frames: Vec<&'static str>,
+    pub playback_frames: Vec<&'static str>,
+    pub playback_frame_index: usize,
+    pub volume: f32,
+    pub show_help: bool,
+    pub log_level: u8,
+}
 
- #[derive(Clone)]
- enum PlaybackState {
-     Playing,
-     Paused,
-     Stopped,
- }
+#[derive(Clone)]
+pub enum PlaybackState {
+    Playing,
+    Paused,
+    Stopped,
+}
 
  #[tokio::main]
  async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -192,261 +193,8 @@
 
          if event::poll(timeout)? {
              match event::read()? {
-                 Event::Key(key) => match key.code {
-                     KeyCode::Char('q') => app.should_quit = true,
-                     KeyCode::Char('p') => {
-                         if let Some(index) = app.selected_station.selected() {
-                             if let Some(station) = app.stations.get(index).cloned() {
-                                 if let Some(original_sink) = &app.sink {
-
-                                     app.active_station = Some(index);
-
-                                     // let sink = Arc::clone(sink);
-                                     let station_url = station.url.clone();
-                                     let station_title = station.title.clone();
-                                     let station_title_error = station_title.clone();
-
-                                     // Stop any existing playback before starting new stream
-                                     if let Ok(locked_sink) = original_sink.lock() {
-                                         locked_sink.stop();
-                                     }
-
-                                     let sink = original_sink.clone();
-                                     let log_tx_clone = log_tx.clone();
-                                     let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
-
-
-                                         // Spawn a new task to handle audio playback
-
-                                         let add_log = {
-                                             let log_tx_clone = log_tx_clone.clone();
-                                             move |msg: String, msg_type: MessageType| {
-                                                 let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                                                 let log_tx_clone = log_tx_clone.clone();
-                                                 async move {
-                                                     let history_message = HistoryMessage {
-                                                         message: msg,
-                                                         message_type: msg_type,
-                                                         timestamp,
-                                                     };
-                                                     let _ = log_tx_clone.send(history_message).await;
-                                                 }
-                                             }
-                                         };
-
-                                         add_log(format!("Initializing stream from: {}", &station_url), MessageType::System).await;
-                                         // We need to add a header to tell the Icecast server that we can parse the metadata embedded
-                                         // within the stream itself.
-                                         let client = Client::builder().request_icy_metadata().build()?;
-
-                                         let stream = HttpStream::new(client, station_url.to_string().parse()?).await?;
-
-                                         let icy_headers = IcyHeaders::parse_from_headers(stream.headers());
-
-                                         // buffer 5 seconds of audio
-                                         // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
-                                         let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 5;
-
-                                         let reader = match StreamDownload::from_stream(
-                                             stream,
-                                             BoundedStorageProvider::new(
-                                                 MemoryStorageProvider,
-                                                 NonZeroUsize::new(512 * 1024).unwrap(),
-                                             ),
-                                             Settings::default().prefetch_bytes(prefetch_bytes as u64),
-                                         )
-
-                                         .await {
-                                             Ok(reader) => {
-                                                 add_log("Got response, starting stream...".to_string(), MessageType::Background).await;
-                                                 Ok(reader)
-                                             },
-                                             Err(e) => {
-                                                 add_log(format!("Error: {}", e), MessageType::Error).await;
-                                                 Err(e)
-                                             }
-                                         };
-
-                                         add_log(format!("Bit rate: {:?}kbps", icy_headers.bitrate().unwrap()), MessageType::Info).await;
-
-
-                                         // Start new playback
-                                         let playback_success = match reader {
-                                             Ok(reader) => {
-
-                                                 // Clone add_log for use in the metadata handler
-                                                 let _add_log_clone = add_log.clone();
-
-                                                 // Create a channel for metadata updates
-                                                 let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::channel(32);
-
-                                                 let decoder = tokio::task::spawn_blocking(move || {
-                                                     rodio::Decoder::new_mp3(IcyMetadataReader::new(
-                                                         reader,
-                                                         icy_headers.metadata_interval(),
-                                                         move |metadata| {
-                                                             if let Ok(metadata) = metadata {
-                                                                 if let Some(title) = metadata.stream_title() {
-                                                                     let _ = metadata_tx.blocking_send(title.to_string());
-                                                                 }
-                                                             }
-                                                         }
-                                                     ))
-                                                 }).await?;
-
-                                                 // Spawn a task to handle metadata updates
-                                                 tokio::spawn({
-                                                     let add_log = add_log.clone();
-                                                     async move {
-                                                         while let Some(title) = metadata_rx.recv().await {
-                                                             add_log(format!("{} :: {}", station_title, title), MessageType::Playback).await;
-                                                         }
-                                                     }
-                                                 });
-
-                                                 // Start playback with the new decoder
-                                                 {
-                                                     let locked_sink = sink.lock().unwrap();
-                                                     locked_sink.append(decoder.unwrap());
-                                                     locked_sink.set_volume(app.volume);
-                                                     locked_sink.play();
-                                                 }
-                                                 true
-                                             },
-                                             Err(_) => {
-                                                 let _ = add_log("Failed to start playback".to_string(), MessageType::Error).await;
-                                                 false
-                                             },
-                                         };
-
-                                         if playback_success {
-                                             add_log("Playback started".to_string(), MessageType::System).await;
-                                         } else {
-                                             add_log("Failed to lock audio sink".to_string(), MessageType::Error).await;
-                                         }
-
-                                         Ok::<_, Box<dyn Error + Send + Sync>>(())
-                                     });
-
-                                     let log_tx_clone = log_tx.clone();
-                                     app.playback_state = PlaybackState::Playing;
-
-                                     tokio::spawn(async move {
-                                         let log_tx_clone_2 = log_tx_clone.clone();
-                                         if let Err(e) = handle.await {
-                                             let _ = log_tx_clone_2.send(HistoryMessage {
-                                                 message: format!("Playback error: {}", e),
-                                                 message_type: MessageType::Error,
-                                                 timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                             }).await;
-                                         } else {
-                                             let _ = log_tx_clone_2.send(HistoryMessage {
-                                                 message: format!("Starting playback of {}", &station_title_error),
-                                                 message_type: MessageType::System,
-                                                 timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                             }).await;
-                                             let _ = log_tx_clone_2.send(HistoryMessage {
-                                                 message: "Connecting to stream...".to_string(),
-                                                 message_type: MessageType::System,
-                                                 timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                             }).await;
-                                         }
-                                     });
-
-
-                                 }
-                             }
-                         }
-                     }
-                     KeyCode::Char('s') => {
-                         if let Some(sink) = &app.sink {
-                             if let Ok(sink) = sink.lock() {
-                                 sink.stop();
-                                 sink.empty();
-                                 app.playback_state = PlaybackState::Stopped;
-                             }
-                         }
-                     }
-                     KeyCode::Char(' ') => {
-                         if let Some(sink) = &app.sink {
-                             if let Ok(sink) = sink.lock() {
-                                 match app.playback_state {
-                                     PlaybackState::Playing => {
-                                         sink.pause();
-                                         app.playback_state = PlaybackState::Paused;
-                                     }
-                                     PlaybackState::Paused => {
-                                         sink.play();
-                                         app.playback_state = PlaybackState::Playing;
-                                     }
-                                     PlaybackState::Stopped => {}
-                                 }
-                             }
-                         }
-                     }
-                     KeyCode::Up => {
-                         if let Some(selected) = app.selected_station.selected() {
-                             if selected > 0 {
-                                 app.selected_station.select(Some(selected - 1));
-                             }
-                         } else if !app.stations.is_empty() {
-                             app.selected_station.select(Some(0));
-                         }
-                     }
-                     KeyCode::Char('+') | KeyCode::Char('=') => {
-                         if app.volume < 2.0 {
-                             app.volume += 0.1;
-                             if let Some(sink) = &app.sink {
-                                 if let Ok(sink) = sink.lock() {
-                                     sink.set_volume(app.volume);
-                                 }
-                             }
-                         }
-                     }
-                     KeyCode::Char('-') => {
-                         if app.volume > 0.0 {
-                             app.volume -= 0.1;
-                             if let Some(sink) = &app.sink {
-                                 if let Ok(sink) = sink.lock() {
-                                     sink.set_volume(app.volume);
-                                 }
-                             }
-                         }
-                     }
-                     KeyCode::Down => {
-                         if !app.loading {
-                             if let Some(selected) = app.selected_station.selected() {
-                                 if selected < app.stations.len() - 1 {
-                                     app.selected_station.select(Some(selected + 1));
-                                 }
-                             } else if !app.stations.is_empty() {
-                                 app.selected_station.select(Some(0));
-                             }
-                         }
-                     }
-                     KeyCode::Char('?') => {
-                         app.show_help = !app.show_help;
-                     }
-                     KeyCode::Char('k') => {
-                         if !app.history.is_empty() {
-                             let i = app.history_scroll_state.selected().unwrap_or(0);
-                             if i < app.history.len() - 1 {
-                                 app.history_scroll_state.select(Some(i + 1));
-                             }
-                         }
-                     }
-                     KeyCode::Char('j') => {
-                         if !app.history.is_empty() {
-                             if let Some(i) = app.history_scroll_state.selected() {
-                                 if i > 0 {
-                                     app.history_scroll_state.select(Some(i - 1));
-                                 }
-                             } else {
-                                 app.history_scroll_state.select(Some(0));
-                             }
-                         }
-                     }
-                     _ => {}
+                 Event::Key(key) => {
+                     keyboard::handle_key_event(key.code, &mut app, &log_tx, &mut last_tick);
                  },
                  Event::Mouse(MouseEvent { kind: MouseEventKind::Down(event::MouseButton::Left), column, row, ..}) => {
                      // Check if click is in controls area
