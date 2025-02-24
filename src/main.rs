@@ -327,7 +327,7 @@ pub enum PlaybackState {
      // Controls
      let controls = Paragraph::new(vec![
          Line::from(vec![
-             Span::styled("Play [Enter]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::styled("Play [↵]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
              Span::styled("Pause [space]", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
@@ -447,7 +447,7 @@ pub enum PlaybackState {
              Line::from("Keyboard Controls:"),
              Line::from(""),
              Line::from(vec![
-                 Span::styled("Enter", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::styled("↵ (Enter)", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
                  Span::raw(" - Play selected station")
              ]),
              Line::from(vec![
