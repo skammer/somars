@@ -336,7 +336,7 @@ pub enum PlaybackState {
              Span::styled("Quit [q]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
              Span::styled("Volume [+/-]", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(format!(" ({:.1})", app.volume)),
+             Span::raw(format!(" ({:.1})", if app.volume.abs() < 0.05 { 0.0 } else { app.volume })),
          ]),
          Line::from(vec![
              Span::raw("Status: "),
