@@ -16,7 +16,7 @@ pub fn handle_key_event(
             app.should_quit = true;
             true
         },
-        KeyCode::Char('p') => {
+        KeyCode::Enter => {
             handle_play(app, log_tx);
             true
         },
