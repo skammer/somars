@@ -2,7 +2,7 @@ use clap::Parser;
 use ratatui::style::Stylize;
 
 use crossterm::{
-    event::{self, Event, KeyCode, MouseEvent, MouseEventKind},
+    event::{self, Event, MouseEvent, MouseEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
         LeaveAlternateScreen},

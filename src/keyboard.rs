@@ -1,6 +1,6 @@
 use crate::{App, MessageType, PlaybackState, HistoryMessage};
 use crossterm::event::KeyCode;
-use icy_metadata::RequestIcyMetadata;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
 use std::time::Instant;
 
@@ -97,7 +97,13 @@ fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                     add_log(format!("Initializing stream from: {}", &station_url), MessageType::System).await;
                     // We need to add a header to tell the Icecast server that we can parse the metadata embedded
                     // within the stream itself.
-                    let client = reqwest::Client::builder().request_icy_metadata().build()?;
+                    let client = reqwest::Client::builder()
+                        .default_headers({
+                            let mut headers = reqwest::header::HeaderMap::new();
+                            headers.insert("Icy-MetaData", "1".parse().unwrap());
+                            headers
+                        })
+                        .build()?;
 
                     let stream = stream_download::http::HttpStream::new(client, station_url.to_string().parse()?).await?;
 
