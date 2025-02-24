@@ -1,15 +1,5 @@
-use std::num::NonZeroUsize;
-use std::error::Error;
 use clap::Parser;
-
-use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
-
 use ratatui::style::Stylize;
-use stream_download::http::HttpStream;
-use stream_download::http::reqwest::Client;
-use stream_download::{Settings, StreamDownload};
-use stream_download::storage::bounded::BoundedStorageProvider;
-use stream_download::storage::memory::MemoryStorageProvider;
 
 use crossterm::{
     event::{self, Event, KeyCode, MouseEvent, MouseEventKind},
