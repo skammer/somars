@@ -488,7 +488,7 @@ pub enum PlaybackState {
          let help_widget = Paragraph::new(help_text)
              .block(Block::default()
                  .title("Help")
-                 .title_bottom(Line::from("somars v0.0.1").right_aligned())
+                 .title_bottom(Line::from(format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))).right_aligned())
                  .borders(Borders::ALL)
                  .border_type(ratatui::widgets::BorderType::Double))
              .alignment(ratatui::layout::Alignment::Left)
