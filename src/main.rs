@@ -2,7 +2,7 @@ use clap::Parser;
 use ratatui::style::Stylize;
 
 use crossterm::{
-    event::{self, Event, MouseEvent, MouseEventKind},
+    event::{self, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
         LeaveAlternateScreen},
@@ -91,8 +91,7 @@ pub enum PlaybackState {
      execute!(
          stdout,
          EnterAlternateScreen,
-         crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-         crossterm::event::EnableMouseCapture
+         crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
      )?;
      let backend = CrosstermBackend::new(stdout);
      let mut terminal = Terminal::new(backend)?;
@@ -185,53 +184,6 @@ pub enum PlaybackState {
              match event::read()? {
                  Event::Key(key) => {
                      keyboard::handle_key_event(key.code, &mut app, &log_tx, &mut last_tick);
-                 },
-                 Event::Mouse(MouseEvent { kind: MouseEventKind::Down(event::MouseButton::Left), column, row, ..}) => {
-                     // Check if click is in controls area
-                     if row == 1 { // First row of controls
-                         match column {
-                             2..=3 => { // Play button
-                                 if let Some(index) = app.selected_station.selected() {
-                                     if let Some(_station) = app.stations.get(index).cloned() {
-                                         // Existing play logic...
-                                     }
-                                 }
-                             },
-                             11..=16 => { // Pause button
-                                 if let Some(sink) = &app.sink {
-                                     if let Ok(sink) = sink.lock() {
-                                         match app.playback_state {
-                                             PlaybackState::Playing => {
-                                                 sink.pause();
-                                                 app.playback_state = PlaybackState::Paused;
-                                             }
-                                             PlaybackState::Paused => {
-                                                 sink.play();
-                                                 app.playback_state = PlaybackState::Playing;
-                                             }
-                                             PlaybackState::Stopped => {}
-                                         }
-                                     }
-                                 }
-                             },
-                             24..=25 => { // Stop button
-                                 if let Some(sink) = &app.sink {
-                                     if let Ok(sink) = sink.lock() {
-                                         sink.stop();
-                                         sink.empty();
-                                         app.playback_state = PlaybackState::Stopped;
-                                     }
-                                 }
-                             },
-                             33..=34 => { // Quit button
-                                 app.should_quit = true;
-                             },
-                             42..=47 => { // Volume controls
-                                 // Click area for volume controls
-                             },
-                             _ => {}
-                         }
-                     }
                  }
                  _ => {}
              }
@@ -251,8 +203,7 @@ pub enum PlaybackState {
      disable_raw_mode()?;
      execute!(
          terminal.backend_mut(),
-         LeaveAlternateScreen,
-         crossterm::event::DisableMouseCapture
+         LeaveAlternateScreen
      )?;
      terminal.show_cursor()?;
 
