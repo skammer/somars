@@ -65,6 +65,12 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
         if let Some(station) = app.stations.get(index).cloned() {
             if let Some(original_sink) = &app.sink {
                 app.active_station = Some(index);
+                app.playback_start_time = Some(std::time::Instant::now());
+                if let Some(pause_time) = app.last_pause_time.take() {
+                    if let Some(start) = app.playback_start_time {
+                        app.total_played += pause_time.duration_since(start);
+                    }
+                }
 
                 // Stop any existing playback before starting new stream
                 if let Ok(locked_sink) = original_sink.lock() {
@@ -222,6 +228,9 @@ fn handle_stop(app: &mut App) {
             sink.stop();
             sink.empty();
             app.playback_state = PlaybackState::Stopped;
+            // Keep total_played duration but reset timing state
+            app.playback_start_time = None;
+            app.last_pause_time = None;
         }
     }
 }
@@ -233,10 +242,15 @@ fn handle_pause(app: &mut App) {
                 PlaybackState::Playing => {
                     sink.pause();
                     app.playback_state = PlaybackState::Paused;
+                    if let Some(start) = app.playback_start_time.take() {
+                        app.total_played += start.elapsed();
+                    }
+                    app.last_pause_time = Some(std::time::Instant::now());
                 }
                 PlaybackState::Paused => {
                     sink.play();
                     app.playback_state = PlaybackState::Playing;
+                    app.playback_start_time = Some(std::time::Instant::now());
                 }
                 PlaybackState::Stopped => {}
             }

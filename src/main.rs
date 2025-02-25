@@ -76,6 +76,9 @@ pub struct App {
     pub volume: f32,
     pub show_help: bool,
     pub log_level: u8,
+    pub playback_start_time: Option<std::time::Instant>,
+    pub total_played: std::time::Duration,
+    pub last_pause_time: Option<std::time::Instant>,
 }
 
 #[derive(Clone)]
@@ -128,6 +131,9 @@ pub enum PlaybackState {
          playback_frame_index: 0,
          show_help: false,
          log_level: cli.log_level,
+         playback_start_time: None,
+         total_played: std::time::Duration::default(),
+         last_pause_time: None,
      };
      
      // Store the station ID to auto-play
@@ -240,6 +246,14 @@ pub enum PlaybackState {
      terminal.show_cursor()?;
 
      Ok(())
+ }
+
+ fn format_duration(d: std::time::Duration) -> String {
+     let secs = d.as_secs();
+     let hours = secs / 3600;
+     let minutes = (secs % 3600) / 60;
+     let seconds = secs % 60;
+     format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
  }
 
  fn ui(f: &mut ratatui::Frame, app: &mut App) {
@@ -396,12 +410,24 @@ pub enum PlaybackState {
                  ]),
                  Line::from(""),
                  Line::from(Span::raw(&station.description)),
-
-                 // Add here a counter that calculates the total number of seconds the music has
-                 // been playing for. Keep in mind that music can be paused. When stopped, do nit
-                 // reset the counter AI!
-                 //
-                 //
+                 Line::from(""),
+                 Line::from(vec![
+                     Span::styled("Playback time: ", Style::default().fg(Color::Yellow)),
+                     Span::raw({
+                         let total = match app.playback_state {
+                             PlaybackState::Playing => {
+                                 let base = app.total_played;
+                                 if let Some(start) = app.playback_start_time {
+                                     base + start.elapsed()
+                                 } else {
+                                     base
+                                 }
+                             }
+                             _ => app.total_played
+                         };
+                         format_duration(total)
+                     }),
+                 ]),
              ])
              .wrap(ratatui::widgets::Wrap { trim: true })
          } else {
