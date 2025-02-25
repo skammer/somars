@@ -2,8 +2,8 @@
 name = "somars"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <you@example.com>"]
-description = "A Rust audio streaming application"
+authors = ["Max Vasiliev <max@vasiliev.me>"]
+description = "A rusty soma.fm player"
 license = "MIT"                                    # Optional, choose appropriate license
 # repository = "https://github.com/yourusername/somars"  # Optional
 
