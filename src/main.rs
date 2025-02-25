@@ -428,8 +428,8 @@ pub enum PlaybackState {
      if app.show_help {
          let help_text = vec![
              Line::from(vec![
-                 // use package name and package description here AI!
-                 Span::styled("SomaRS - SomaFM Terminal Client", Style::default().add_modifier(ratatui::style::Modifier::BOLD))
+                 Span::styled(format!("{} - {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_DESCRIPTION")), 
+                     Style::default().add_modifier(ratatui::style::Modifier::BOLD))
              ]),
              Line::from(""),
              Line::from("Keyboard Controls:"),
