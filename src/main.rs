@@ -302,6 +302,7 @@ pub enum PlaybackState {
                  Constraint::Length(3), // Controls
                  Constraint::Length(10), // Now Playing
                  Constraint::Fill(1), // History
+                 Constraint::Length(1), // Bottom controls
                  ]
                  .as_ref(),
          )
@@ -452,6 +453,26 @@ pub enum PlaybackState {
          .highlight_style(Style::default().italic().add_modifier(ratatui::style::Modifier::UNDERLINED));
      f.render_stateful_widget(history_list, right_chunks[2], &mut app.history_scroll_state);
 
+     // Bottom controls bar
+     let bottom_controls = Line::from(vec![
+         Span::styled("q", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Quit "),
+         Span::styled("↵", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Play "),
+         Span::styled("Space", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Pause "),
+         Span::styled("s", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Stop "),
+         Span::styled("+/-", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Vol "),
+         Span::styled("?", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Help"),
+     ]);
+     
+     let bottom_bar = Paragraph::new(bottom_controls)
+         .alignment(ratatui::layout::Alignment::Center);
+     
+     f.render_widget(bottom_bar, right_chunks[3]);
 
      if app.show_help {
          let help_text = vec![
