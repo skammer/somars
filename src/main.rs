@@ -405,7 +405,6 @@ pub enum PlaybackState {
                  .collect();
              let lines: Vec<Line> = wrapped_lines
                  .into_iter()
-                 // append the playback indicator in the last line of the history AI!
                  .map(|line| Line::from(Span::styled(line, style)))
                  .collect();
              let text = Text::from(lines);
@@ -429,6 +428,7 @@ pub enum PlaybackState {
      if app.show_help {
          let help_text = vec![
              Line::from(vec![
+                 // use package name and package description here AI!
                  Span::styled("SomaRS - SomaFM Terminal Client", Style::default().add_modifier(ratatui::style::Modifier::BOLD))
              ]),
              Line::from(""),
