@@ -403,16 +403,36 @@ pub enum PlaybackState {
                  MessageType::Playback => Style::default().fg(Color::Green),
              };
 
-             // Format timestamp and message with better alignment. Use ratatui Table widget AI!
-             let formatted_msg = format!("{} │ {}", msg.timestamp, msg.message);
-             let wrapped_lines: Vec<String> = textwrap::wrap(&formatted_msg, width.saturating_sub(2))
+             // Format timestamp and message as separate columns
+             let timestamp_span = Span::styled(msg.timestamp.clone(), style);
+            
+             // Wrap just the message part
+             let message_width = width.saturating_sub(10); // Timestamp width + separator
+             let wrapped_lines: Vec<String> = textwrap::wrap(&msg.message, message_width)
                  .into_iter()
                  .map(|s| s.to_string())
                  .collect();
-             let lines: Vec<Line> = wrapped_lines
-                 .into_iter()
-                 .map(|line| Line::from(Span::styled(line, style)))
-                 .collect();
+            
+             // Create lines with proper alignment
+             let mut lines = Vec::new();
+             if let Some(first_line) = wrapped_lines.first() {
+                 // First line has timestamp
+                 lines.push(Line::from(vec![
+                     timestamp_span.clone(),
+                     Span::styled(" │ ", style),
+                     Span::styled(first_line.clone(), style),
+                 ]));
+             }
+            
+             // Additional lines are indented to align with first message line
+             for line in wrapped_lines.iter().skip(1) {
+                 lines.push(Line::from(vec![
+                     Span::styled("         ", style), // Timestamp width spaces
+                     Span::styled(" │ ", style),
+                     Span::styled(line.clone(), style),
+                 ]));
+             }
+            
              let text = Text::from(lines);
              ListItem::new(text)
          })
