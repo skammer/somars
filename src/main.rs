@@ -405,34 +405,33 @@ pub enum PlaybackState {
 
              // Format timestamp and message as separate columns
              let timestamp_span = Span::styled(msg.timestamp.clone(), style);
-            
+
              // Wrap just the message part
              let message_width = width.saturating_sub(10); // Timestamp width + separator
              let wrapped_lines: Vec<String> = textwrap::wrap(&msg.message, message_width)
                  .into_iter()
                  .map(|s| s.to_string())
                  .collect();
-            
+
              // Create lines with proper alignment
              let mut lines = Vec::new();
              if let Some(first_line) = wrapped_lines.first() {
                  // First line has timestamp
                  lines.push(Line::from(vec![
                      timestamp_span.clone(),
-                     Span::styled(" │ ", style),
+                     Span::styled("  ", style),
                      Span::styled(first_line.clone(), style),
                  ]));
              }
-            
+
              // Additional lines are indented to align with first message line
              for line in wrapped_lines.iter().skip(1) {
                  lines.push(Line::from(vec![
-                     Span::styled("         ", style), // Timestamp width spaces
-                     Span::styled(" │ ", style),
+                     Span::styled("          ", style), // Timestamp width spaces
                      Span::styled(line.clone(), style),
                  ]));
              }
-            
+
              let text = Text::from(lines);
              ListItem::new(text)
          })
