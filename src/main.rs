@@ -323,6 +323,10 @@ pub enum PlaybackState {
          if let Some(station) = app.stations.get(index) {
              Paragraph::new(vec![
                  Line::from(vec![
+                     Span::styled("ID: ", Style::default().fg(Color::Yellow)),
+                     Span::raw(&station.id),
+                 ]),
+                 Line::from(vec![
                      Span::styled("Title: ", Style::default().fg(Color::Yellow)),
                      Span::raw(&station.title),
                  ]),
