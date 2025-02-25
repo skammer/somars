@@ -348,7 +348,7 @@ pub enum PlaybackState {
              },
          ]))
          .title(Line::from(vec![
-                 Span::styled(format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")), 
+                 Span::styled(format!(" ♪ {} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")), 
                      Style::default().add_modifier(ratatui::style::Modifier::BOLD))
          ]).right_aligned())
      );
