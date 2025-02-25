@@ -462,6 +462,25 @@ pub enum PlaybackState {
                  Span::raw(" - Toggle this help screen")
              ]),
              Line::from(""),
+             Line::from("Command Line Arguments:"),
+             Line::from(""),
+             Line::from(vec![
+                 Span::styled("--log-level <1|2>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Set log verbosity (1=minimal, 2=verbose)")
+             ]),
+             Line::from(vec![
+                 Span::styled("--station <ID>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Auto-play station with given ID on startup")
+             ]),
+             Line::from(vec![
+                 Span::styled("--help", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Show command line help")
+             ]),
+             Line::from(vec![
+                 Span::styled("--version", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Show version information")
+             ]),
+             Line::from(""),
              Line::from("Press ? to close this help screen"),
          ];
 
