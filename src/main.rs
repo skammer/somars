@@ -273,7 +273,7 @@ pub enum PlaybackState {
      ]);
 
 
-     let bottom_controld_alt = Paragraph::new(vec![
+     let bottom_controls_alt = Paragraph::new(vec![
          Line::from(vec![
              Span::styled("Play [↵]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
@@ -305,9 +305,11 @@ pub enum PlaybackState {
 
 
      let bottom_bar = Paragraph::new(bottom_controls)
-         .alignment(ratatui::layout::Alignment::Center);
+         .alignment(ratatui::layout::Alignment::Left);
 
+     // TODO: decide which option looks better
      f.render_widget(bottom_bar, app_layout[1]);
+     // f.render_widget(bottom_controls_alt, app_layout[1]);
 
 
      let chunks = Layout::default()
