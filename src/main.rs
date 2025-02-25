@@ -402,7 +402,8 @@ pub enum PlaybackState {
                  MessageType::Background => Style::default().fg(Color::DarkGray),
                  MessageType::Playback => Style::default().fg(Color::Green),
              };
-             // Format timestamp and message with better alignment
+
+             // Format timestamp and message with better alignment. Use ratatui Table widget AI!
              let formatted_msg = format!("{} │ {}", msg.timestamp, msg.message);
              let wrapped_lines: Vec<String> = textwrap::wrap(&formatted_msg, width.saturating_sub(2))
                  .into_iter()
