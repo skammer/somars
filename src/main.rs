@@ -405,6 +405,7 @@ pub enum PlaybackState {
                  .collect();
              let lines: Vec<Line> = wrapped_lines
                  .into_iter()
+                 // append the playback indicator in the last line of the history AI!
                  .map(|line| Line::from(Span::styled(line, style)))
                  .collect();
              let text = Text::from(lines);
