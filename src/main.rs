@@ -159,18 +159,18 @@ pub enum PlaybackState {
                      Ok(stations) => {
                          app.stations = stations;
                          app.loading = false;
-                         
+
                          // If a station ID was provided via command line, find and play it
                          if let Some(station_id) = &auto_play_station_id {
                              let station_index = app.stations.iter().position(|s| s.id == *station_id);
-                             
+
                              if let Some(index) = station_index {
                                  // Select the station in the UI
                                  app.selected_station.select(Some(index));
-                                 
+
                                  // Play the station
                                  keyboard::handle_play(&mut app, &log_tx);
-                                 
+
                                  app.history.push(HistoryMessage {
                                      message: format!("Auto-playing station: {}", station_id),
                                      message_type: MessageType::System,
@@ -243,10 +243,77 @@ pub enum PlaybackState {
  }
 
  fn ui(f: &mut ratatui::Frame, app: &mut App) {
+
+     // app layout - ui and controls
+     let app_layout = Layout::default()
+         .direction(Direction::Vertical)
+         .constraints(
+             [
+             Constraint::Fill(1), // History
+             Constraint::Length(1), // Bottom controls
+             ]
+             .as_ref(),
+         )
+         .split(f.area());
+
+     // Bottom controls bar
+     let bottom_controls = Line::from(vec![
+         Span::styled("q", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Quit "),
+         Span::styled("↵", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Play "),
+         Span::styled("Space", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Pause "),
+         Span::styled("s", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Stop "),
+         Span::styled("+/-", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Vol "),
+         Span::styled("?", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(":Help"),
+     ]);
+
+
+     let bottom_controld_alt = Paragraph::new(vec![
+         Line::from(vec![
+             Span::styled("Play [↵]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::raw(" "),
+             Span::styled("Pause [space]", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::raw(" "),
+             Span::styled("Stop [s]", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::raw(" "),
+             Span::styled("Quit [q]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::raw(" "),
+             Span::styled("Volume [+/-]", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::REVERSED)),
+             Span::raw(format!(" ({:.1})", if app.volume.abs() < 0.05 { 0.0 } else { app.volume })),
+         ]),
+         Line::from(vec![
+             Span::raw("Status: "),
+             Span::styled(
+                 match app.playback_state {
+                     PlaybackState::Playing => "Playing",
+                     PlaybackState::Paused => "Paused",
+                     PlaybackState::Stopped => "Stopped",
+                 },
+                 match app.playback_state {
+                     PlaybackState::Playing => Style::default().fg(Color::Green),
+                     PlaybackState::Paused => Style::default().fg(Color::Blue),
+                     PlaybackState::Stopped => Style::default().fg(Color::Red),
+                 },
+             ),
+         ]),
+     ]);
+
+
+     let bottom_bar = Paragraph::new(bottom_controls)
+         .alignment(ratatui::layout::Alignment::Center);
+
+     f.render_widget(bottom_bar, app_layout[1]);
+
+
      let chunks = Layout::default()
          .direction(Direction::Horizontal)
          .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-         .split(f.area());
+         .split(app_layout[0]);
 
      // Left panel - Station list or loading indicator
      if app.loading {
@@ -297,63 +364,13 @@ pub enum PlaybackState {
      // Right panel - Playback controls and info
      let right_chunks = Layout::default()
          .direction(Direction::Vertical)
-         .constraints(
-             [
-                 Constraint::Length(3), // Controls
-                 Constraint::Length(10), // Now Playing
-                 Constraint::Fill(1), // History
-                 Constraint::Length(1), // Bottom controls
-                 ]
-                 .as_ref(),
+         .constraints([
+             Constraint::Length(10), // Now Playing
+             Constraint::Fill(1), // History
+         ]
+         .as_ref(),
          )
          .split(chunks[1]);
-
-     // Controls
-     let controls = Paragraph::new(vec![
-         Line::from(vec![
-             Span::styled("Play [↵]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(" "),
-             Span::styled("Pause [space]", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(" "),
-             Span::styled("Stop [s]", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(" "),
-             Span::styled("Quit [q]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(" "),
-             Span::styled("Volume [+/-]", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(format!(" ({:.1})", if app.volume.abs() < 0.05 { 0.0 } else { app.volume })),
-         ]),
-         Line::from(vec![
-             Span::raw("Status: "),
-             Span::styled(
-                 match app.playback_state {
-                     PlaybackState::Playing => "Playing",
-                     PlaybackState::Paused => "Paused",
-                     PlaybackState::Stopped => "Stopped",
-                 },
-                 match app.playback_state {
-                     PlaybackState::Playing => Style::default().fg(Color::Green),
-                     PlaybackState::Paused => Style::default().fg(Color::Blue),
-                     PlaybackState::Stopped => Style::default().fg(Color::Red),
-                 },
-             ),
-         ]),
-     ])
-     .block(Block::default()
-         .borders(Borders::ALL)
-         .title(Line::from(vec![
-             Span::raw("Controls "),
-             if matches!(app.playback_state, PlaybackState::Playing) {
-                 Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
-             } else {
-                 Span::raw("")
-             },
-         ]))
-         .title(Line::from(vec![
-                 Span::styled(format!(" ♪ {} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")), 
-                     Style::default().add_modifier(ratatui::style::Modifier::BOLD))
-         ]).right_aligned())
-     );
-     f.render_widget(controls, right_chunks[0]);
 
      // Now Playing
      let now_playing = if let Some(index) = app.selected_station.selected() {
@@ -385,8 +402,44 @@ pub enum PlaybackState {
      } else {
          Paragraph::new(vec![Line::from("No station selected")])
      }
-     .block(Block::default().borders(Borders::ALL).title("Details"));
-     f.render_widget(now_playing, right_chunks[1]);
+     .block(Block::default().borders(Borders::ALL)
+         .title(Line::from(vec![
+                 Span::styled(format!(" ♪ {} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")), 
+                     Style::default().add_modifier(ratatui::style::Modifier::BOLD))
+         ]).right_aligned())
+         .title(
+             Line::from(vec![
+                 Span::raw("["),
+                 Span::styled(
+                     match app.playback_state {
+                         PlaybackState::Playing => "Playing",
+                         PlaybackState::Paused => "Paused",
+                         PlaybackState::Stopped => "Stopped",
+                     },
+                     match app.playback_state {
+                         PlaybackState::Playing => Style::default().fg(Color::Green),
+                         PlaybackState::Paused => Style::default().fg(Color::Blue),
+                         PlaybackState::Stopped => Style::default().fg(Color::Red),
+                     },
+                 ),
+                 Span::raw("]"),
+
+                 if matches!(app.playback_state, PlaybackState::Playing) {
+                     Span::styled(format!(" {}", app.playback_frames[app.playback_frame_index]), Style::default().fg(Color::Green))
+                 } else {
+                     Span::raw("")
+                 },
+
+             ]),
+         )
+
+         .title_bottom(
+             Line::from(
+                 format!("[Volume: {:.1}]", if app.volume.abs() < 0.05 { 0.0 } else { app.volume })
+                 ).centered()
+             )
+         );
+     f.render_widget(now_playing, right_chunks[0]);
 
      // History
      let history_items: Vec<ListItem> = app
@@ -395,7 +448,7 @@ pub enum PlaybackState {
          .rev()
          .filter(|msg| app.log_level > 1 || matches!(msg.message_type, MessageType::Error) || matches!(msg.message_type, MessageType::Playback))
          .map(|msg| {
-             let width = right_chunks[2].width as usize;
+             let width = right_chunks[1].width as usize;
              let style = match msg.message_type {
                  MessageType::Error => Style::default().fg(Color::Red),
                  MessageType::Info => Style::default().fg(Color::White),
@@ -451,28 +504,7 @@ pub enum PlaybackState {
              .title_bottom(Line::from(format!("[{} / {}]", selected_history_pos, total_history)).right_aligned())
          )
          .highlight_style(Style::default().italic().add_modifier(ratatui::style::Modifier::UNDERLINED));
-     f.render_stateful_widget(history_list, right_chunks[2], &mut app.history_scroll_state);
-
-     // Bottom controls bar
-     let bottom_controls = Line::from(vec![
-         Span::styled("q", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Quit "),
-         Span::styled("↵", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Play "),
-         Span::styled("Space", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Pause "),
-         Span::styled("s", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Stop "),
-         Span::styled("+/-", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Vol "),
-         Span::styled("?", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Help"),
-     ]);
-     
-     let bottom_bar = Paragraph::new(bottom_controls)
-         .alignment(ratatui::layout::Alignment::Center);
-     
-     f.render_widget(bottom_bar, right_chunks[3]);
+     f.render_stateful_widget(history_list, right_chunks[1], &mut app.history_scroll_state);
 
      if app.show_help {
          let help_text = vec![
