@@ -53,6 +53,10 @@ struct Cli {
     /// Log level (1=minimal, 2=verbose)
     #[arg(short, long, default_value_t = 1)]
     log_level: u8,
+    
+    /// Station ID to automatically play on startup
+    #[arg(short, long)]
+    station: Option<String>,
 }
 
 pub struct App {
@@ -125,6 +129,9 @@ pub enum PlaybackState {
          show_help: false,
          log_level: cli.log_level,
      };
+     
+     // Store the station ID to auto-play
+     let auto_play_station_id = cli.station.clone();
 
      // Spawn station fetching task
      let (tx, mut rx) = tokio::sync::mpsc::channel(1);
@@ -152,6 +159,31 @@ pub enum PlaybackState {
                      Ok(stations) => {
                          app.stations = stations;
                          app.loading = false;
+                         
+                         // If a station ID was provided via command line, find and play it
+                         if let Some(station_id) = &auto_play_station_id {
+                             let station_index = app.stations.iter().position(|s| s.id == *station_id);
+                             
+                             if let Some(index) = station_index {
+                                 // Select the station in the UI
+                                 app.selected_station.select(Some(index));
+                                 
+                                 // Play the station
+                                 keyboard::handle_play(&mut app, &log_tx);
+                                 
+                                 app.history.push(HistoryMessage {
+                                     message: format!("Auto-playing station: {}", station_id),
+                                     message_type: MessageType::System,
+                                     timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                 });
+                             } else {
+                                 app.history.push(HistoryMessage {
+                                     message: format!("Station ID not found: {}", station_id),
+                                     message_type: MessageType::Error,
+                                     timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                 });
+                             }
+                         }
                      }
                      Err(e) => {
                          app.history.push(HistoryMessage {
