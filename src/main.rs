@@ -402,8 +402,8 @@ pub enum PlaybackState {
                  MessageType::Background => Style::default().fg(Color::DarkGray),
                  MessageType::Playback => Style::default().fg(Color::Green),
              };
-             // Display history as a table with two columns: timestamp and message AI!
-             let formatted_msg = format!("{}| {}", msg.timestamp, msg.message);
+             // Format timestamp and message with better alignment
+             let formatted_msg = format!("{} │ {}", msg.timestamp, msg.message);
              let wrapped_lines: Vec<String> = textwrap::wrap(&formatted_msg, width.saturating_sub(2))
                  .into_iter()
                  .map(|s| s.to_string())
