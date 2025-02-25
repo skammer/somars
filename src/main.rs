@@ -339,13 +339,17 @@ pub enum PlaybackState {
      ])
      .block(Block::default()
          .borders(Borders::ALL)
-         .title("Controls")
          .title(Line::from(vec![
+             Span::raw("Controls "),
              if matches!(app.playback_state, PlaybackState::Playing) {
                  Span::styled(app.playback_frames[app.playback_frame_index], Style::default().fg(Color::Green))
              } else {
                  Span::raw("")
              },
+         ]))
+         .title(Line::from(vec![
+                 Span::styled(format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")), 
+                     Style::default().add_modifier(ratatui::style::Modifier::BOLD))
          ]).right_aligned())
      );
      f.render_widget(controls, right_chunks[0]);
