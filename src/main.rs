@@ -396,6 +396,12 @@ pub enum PlaybackState {
                  ]),
                  Line::from(""),
                  Line::from(Span::raw(&station.description)),
+
+                 // Add here a counter that calculates the total number of seconds the music has
+                 // been playing for. Keep in mind that music can be paused. When stopped, do nit
+                 // reset the counter AI!
+                 //
+                 //
              ])
              .wrap(ratatui::widgets::Wrap { trim: true })
          } else {
