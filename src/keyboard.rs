@@ -60,7 +60,7 @@ pub fn handle_key_event(
     }
 }
 
-fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
+pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
     if let Some(index) = app.selected_station.selected() {
         if let Some(station) = app.stations.get(index).cloned() {
             if let Some(original_sink) = &app.sink {
