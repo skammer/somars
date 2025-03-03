@@ -111,9 +111,9 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
 
                     let icy_headers = icy_metadata::IcyHeaders::parse_from_headers(stream.headers());
 
-                    // buffer 5 seconds of audio
-                    // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
-                    let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 5;
+                    // buffer 60 seconds of audio
+                    // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 60 seconds
+                    let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 60;
 
                     let reader = match stream_download::StreamDownload::from_stream(
                         stream,
