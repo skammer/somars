@@ -277,7 +277,7 @@ pub enum PlaybackState {
          Span::styled("↵", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD)),
          Span::raw(":Play "),
          Span::styled("Space", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Pause "),
+         Span::raw(":Stop "),
          Span::styled("s", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::BOLD)),
          Span::raw(":Stop "),
          Span::styled("+/-", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::BOLD)),
@@ -555,7 +555,7 @@ pub enum PlaybackState {
              ]),
              Line::from(vec![
                  Span::styled("Space", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Pause/Resume playback")
+                 Span::raw(" - Stop playback")
              ]),
              Line::from(vec![
                  Span::styled("s", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
