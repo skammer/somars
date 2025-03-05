@@ -21,11 +21,12 @@ pub fn handle_key_event(
             true
         },
         KeyCode::Char('s') => {
-            handle_stop(app);
+            handle_stop(app, false);
             true
         },
         KeyCode::Char(' ') => {
-            handle_stop(app);
+            // handle_stop(app, true);
+            handle_pause(app);
             true
         },
         KeyCode::Up => {
@@ -111,9 +112,9 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
 
                     let icy_headers = icy_metadata::IcyHeaders::parse_from_headers(stream.headers());
 
-                    // buffer 60 seconds of audio
-                    // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 60 seconds
-                    let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 60;
+                    // buffer 10 seconds of audio
+                    // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 10 seconds
+                    let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 10;
 
                     let reader = match stream_download::StreamDownload::from_stream(
                         stream,
@@ -222,15 +223,33 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
     }
 }
 
-fn handle_stop(app: &mut App) {
+fn handle_stop(app: &mut App, soft_stop: bool) {
     if let Some(sink) = &app.sink {
         if let Ok(sink) = sink.lock() {
-            sink.stop();
-            sink.empty();
-            app.playback_state = PlaybackState::Stopped;
             // Keep total_played duration but reset timing state
-            app.playback_start_time = None;
-            app.last_pause_time = None;
+            // app.playback_start_time = None;
+            // app.last_pause_time = None;
+            //
+
+            match app.playback_state {
+                PlaybackState::Playing => {
+                    sink.stop();
+                    sink.empty();
+                    app.playback_state = PlaybackState::Stopped;
+                    if let Some(start) = app.playback_start_time.take() {
+                        app.total_played += start.elapsed();
+                    }
+                    app.last_pause_time = Some(std::time::Instant::now());
+                }
+                PlaybackState::Stopped => {
+                    if soft_stop {
+                        sink.play();
+                        app.playback_state = PlaybackState::Playing;
+                        app.playback_start_time = Some(std::time::Instant::now());
+                    }
+                }
+                PlaybackState::Paused => {}
+            }
         }
     }
 }
