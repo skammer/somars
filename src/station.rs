@@ -27,7 +27,8 @@
       dj: String,
       genre: String,
       image: String,
-      lastPlaying: String,
+      #[serde(rename = "lastPlaying")]
+      last_playing: String,
       playlists: Vec<Playlist>,
   }
 

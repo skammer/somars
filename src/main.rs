@@ -70,7 +70,7 @@ struct Cli {
     station: Option<String>,
 
     /// Enable UDP control on specified port
-    #[arg(short, long)]
+    #[arg(short = 'p', long)]
     listen: Option<u16>,
 }
 
@@ -338,7 +338,7 @@ pub enum PlaybackState {
      ]);
 
 
-     let bottom_controls_alt = Paragraph::new(vec![
+     let _bottom_controls_alt = Paragraph::new(vec![
          Line::from(vec![
              Span::styled("Play [↵]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
              Span::raw(" "),
