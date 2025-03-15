@@ -22,6 +22,17 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant}
 };
+
+#[derive(Debug)]
+enum ControlCommand {
+    Play,
+    Pause,
+    Stop,
+    VolumeUp,
+    VolumeDown,
+    SetVolume(f32),
+    Tune(String),
+}
 use rodio::{OutputStream, Sink};
 
 mod station;
@@ -57,6 +68,10 @@ struct Cli {
     /// Station ID to automatically play on startup
     #[arg(short, long)]
     station: Option<String>,
+
+    /// Enable UDP control on specified port
+    #[arg(short, long)]
+    listen: Option<u16>,
 }
 
 pub struct App {
@@ -108,8 +123,19 @@ pub enum PlaybackState {
      let (_stream, stream_handle) = OutputStream::try_default()?;
      let sink = Sink::try_new(&stream_handle)?;
 
-     // Create channels for logging
+     // Create channels for logging and control
      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
+     let (command_tx, mut command_rx) = tokio::sync::mpsc::channel(32);
+
+     // Start UDP listener if enabled
+     if let Some(port) = cli.listen {
+         let command_tx = command_tx.clone();
+         tokio::spawn(async move {
+             if let Err(e) = handle_udp_commands(port, command_tx).await {
+                 eprintln!("UDP listener error: {}", e);
+             }
+         });
+     }
 
      let mut selected_station = ListState::default();
      selected_station.select(Some(0));
@@ -208,6 +234,31 @@ pub enum PlaybackState {
          // Check for log messages
          while let Ok(log_msg) = log_rx.try_recv() {
              app.history.push(log_msg);
+         }
+
+         // Process control commands
+         while let Ok(cmd) = command_rx.try_recv() {
+             match cmd {
+                 ControlCommand::Play => keyboard::handle_play(&mut app, &log_tx),
+                 ControlCommand::Pause => keyboard::handle_pause(&mut app),
+                 ControlCommand::Stop => keyboard::handle_stop(&mut app, false),
+                 ControlCommand::VolumeUp => keyboard::handle_volume_up(&mut app),
+                 ControlCommand::VolumeDown => keyboard::handle_volume_down(&mut app),
+                 ControlCommand::SetVolume(level) => {
+                     app.volume = level.clamp(0.0, 2.0);
+                     if let Some(sink) = &app.sink {
+                         if let Ok(sink) = sink.lock() {
+                             sink.set_volume(app.volume);
+                         }
+                     }
+                 }
+                 ControlCommand::Tune(station_id) => {
+                     if let Some(index) = app.stations.iter().position(|s| s.id == station_id) {
+                         app.selected_station.select(Some(index));
+                         keyboard::handle_play(&mut app, &log_tx);
+                     }
+                 }
+             }
          }
 
          if last_tick.elapsed() >= tick_rate {
@@ -617,7 +668,34 @@ pub enum PlaybackState {
  }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCommand>) -> io::Result<()> {
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    use tokio::net::UdpSocket;
+    
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    let socket = UdpSocket::bind(("0.0.0.0", port)).await?;
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    let mut buf = [0; 1024];
+
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    loop {
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        let (len, _) = socket.recv_from(&mut buf).await?;
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        let msg = String::from_utf8_lossy(&buf[..len]).trim().to_lowercase();
+        
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        let cmd = match msg.split_whitespace().collect::<Vec<_>>().as_slice() {
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["play"] => ControlCommand::Play,
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["pause"] => ControlCommand::Pause,
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["stop"] => ControlCommand::Stop,
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["volume", "up"] => ControlCommand::VolumeUp,
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["volume", "down"] => ControlCommand::VolumeDown,
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["volume", num] => num.parse().ok().map(ControlCommand::SetVolume).unwrap_or_else(|| {
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {                ControlCommand::SetVolume(1.0)
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            }),
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["tune", id] => ControlCommand::Tune(id.to_string()),
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            _ => continue,
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        };
+        
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        tx.send(cmd).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    }
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {}
+
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
     let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
     let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
     let [area] = vertical.areas(area);
