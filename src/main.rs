@@ -665,6 +665,10 @@ pub enum PlaybackState {
                  Span::raw(" - Auto-play station with given ID on startup")
              ]),
              Line::from(vec![
+                 Span::styled("--listen <PORT>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Enable UDP control on specified port")
+             ]),
+             Line::from(vec![
                  Span::styled("--help", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
                  Span::raw(" - Show command line help")
              ]),
