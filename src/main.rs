@@ -146,7 +146,7 @@ pub enum PlaybackState {
          // Add this log message before spawning
          let _ = log_tx.send(HistoryMessage {
              message: format!("Starting UDP command listener on port {}", port),
-             message_type: MessageType::System,
+             message_type: MessageType::Info,
              timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
          }).await;
 
