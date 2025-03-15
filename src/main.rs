@@ -141,9 +141,24 @@ pub enum PlaybackState {
      // Start UDP listener if enabled
      if let Some(port) = cli.listen {
          let command_tx = command_tx.clone();
+         let log_tx = log_tx.clone();  // Add this line
+         
+         // Add this log message before spawning
+         let _ = log_tx.send(HistoryMessage {
+             message: format!("Starting UDP command listener on port {}", port),
+             message_type: MessageType::System,
+             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+         }).await;
+
          tokio::spawn(async move {
              if let Err(e) = handle_udp_commands(port, command_tx).await {
                  eprintln!("UDP listener error: {}", e);
+                 // Add error logging here too
+                 let _ = log_tx.send(HistoryMessage {
+                     message: format!("UDP error: {}", e),
+                     message_type: MessageType::Error,
+                     timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                 }).await;
              }
          });
      }
