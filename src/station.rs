@@ -84,7 +84,7 @@
                   genre: channel.genre,
                   url: stream_url,
                   image: channel.image,
-                  last_playing: channel.lastPlaying,
+                  last_playing: channel.last_playing,
               })
           })).await?;
 
