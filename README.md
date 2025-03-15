@@ -1,6 +1,6 @@
 # somars - A Terminal-Based SomaFM Player
 
-![somars screenshot](https://via.placeholder.com/800x600.png?text=somars+TUI+Screenshot)  
+![somars screenshot](screenshot.png)
 *Screenshot placeholder - replace with actual image URL*
 
 A Rust implementation of a SomaFM internet radio player with TUI interface and UDP control.
