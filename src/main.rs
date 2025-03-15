@@ -604,9 +604,8 @@ pub enum PlaybackState {
 
      let selected_history_pos = app.history_scroll_state.selected().unwrap_or(0) + 1;
      let total_history = app.history.iter()
-         .filter(|msg| app.log_level > 1 || matches!(msg.message_type, MessageType::Error) || matches!(msg.message_type, MessageType::Playback))
-         .collect::<Vec<_>>()
-         .len();
+         .filter(|msg| app.log_level > 1 || matches!(msg.message_type, MessageType::Error | MessageType::Info | MessageType::Playback))
+         .count();
      let history_list = List::new(history_items).direction(ListDirection::BottomToTop)
          .block(Block::default()
              .borders(Borders::ALL)
