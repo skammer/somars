@@ -120,8 +120,19 @@ pub enum PlaybackState {
      terminal.clear()?;
 
      // Create app state
-     let (_stream, stream_handle) = OutputStream::try_default()?;
-     let sink = Sink::try_new(&stream_handle)?;
+     let (_stream, stream_handle) = OutputStream::try_default().map_err(|e| {
+         anyhow::anyhow!("Failed to initialize audio: {}. Check your system's audio devices.", e)
+     })?;
+
+     let sink = match Sink::try_new(&stream_handle) {
+         Ok(s) => s,
+         Err(e) => {
+             return Err(anyhow::anyhow!(
+                 "Failed to create audio sink: {}. Make sure another application isn't blocking audio access.",
+                 e
+             ).into());
+         }
+     };
 
      // Create channels for logging and control
      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
