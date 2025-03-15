@@ -135,7 +135,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                         }
                     };
 
-                    add_log(format!("Bit rate: {:?}kbps", icy_headers.bitrate().unwrap()), MessageType::Info).await;
+                    add_log(format!("Bit rate: {:?}kbps", icy_headers.bitrate().unwrap()), MessageType::System).await;
 
                     // Start new playback
                     let playback_success = match reader {
