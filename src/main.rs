@@ -667,35 +667,35 @@ pub enum PlaybackState {
 
  }
 
-/// helper function to create a centered rect using up certain percentage of the available rect `r`
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCommand>) -> io::Result<()> {
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    use tokio::net::UdpSocket;
+async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCommand>) -> io::Result<()> {
+    use tokio::net::UdpSocket;
     
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    let socket = UdpSocket::bind(("0.0.0.0", port)).await?;
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    let mut buf = [0; 1024];
+    let socket = UdpSocket::bind(("0.0.0.0", port)).await?;
+    let mut buf = [0; 1024];
 
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    loop {
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        let (len, _) = socket.recv_from(&mut buf).await?;
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        let msg = String::from_utf8_lossy(&buf[..len]).trim().to_lowercase();
+    loop {
+        let (len, _) = socket.recv_from(&mut buf).await?;
+        let msg = String::from_utf8_lossy(&buf[..len]).trim().to_lowercase();
         
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        let cmd = match msg.split_whitespace().collect::<Vec<_>>().as_slice() {
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["play"] => ControlCommand::Play,
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["pause"] => ControlCommand::Pause,
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["stop"] => ControlCommand::Stop,
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["volume", "up"] => ControlCommand::VolumeUp,
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["volume", "down"] => ControlCommand::VolumeDown,
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["volume", num] => num.parse().ok().map(ControlCommand::SetVolume).unwrap_or_else(|| {
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {                ControlCommand::SetVolume(1.0)
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            }),
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            ["tune", id] => ControlCommand::Tune(id.to_string()),
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {            _ => continue,
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        };
+        let cmd = match msg.split_whitespace().collect::<Vec<_>>().as_slice() {
+            ["play"] => ControlCommand::Play,
+            ["pause"] => ControlCommand::Pause,
+            ["stop"] => ControlCommand::Stop,
+            ["volume", "up"] => ControlCommand::VolumeUp,
+            ["volume", "down"] => ControlCommand::VolumeDown,
+            ["volume", num] => num.parse().ok().map(ControlCommand::SetVolume).unwrap_or_else(|| {
+                ControlCommand::SetVolume(1.0)
+            }),
+            ["tune", id] => ControlCommand::Tune(id.to_string()),
+            _ => continue,
+        };
         
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {        tx.send(cmd).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {    }
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {}
+        tx.send(cmd).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    }
+}
 
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
     let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
     let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
     let [area] = vertical.areas(area);
