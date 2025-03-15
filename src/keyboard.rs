@@ -223,7 +223,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
     }
 }
 
-fn handle_stop(app: &mut App, soft_stop: bool) {
+pub fn handle_stop(app: &mut App, soft_stop: bool) {
     if let Some(sink) = &app.sink {
         if let Ok(sink) = sink.lock() {
             // Keep total_played duration but reset timing state
@@ -254,7 +254,7 @@ fn handle_stop(app: &mut App, soft_stop: bool) {
     }
 }
 
-fn handle_pause(app: &mut App) {
+pub fn handle_pause(app: &mut App) {
     if let Some(sink) = &app.sink {
         if let Ok(sink) = sink.lock() {
             match app.playback_state {
@@ -299,7 +299,7 @@ fn handle_down(app: &mut App) {
     }
 }
 
-fn handle_volume_up(app: &mut App) {
+pub fn handle_volume_up(app: &mut App) {
     if app.volume < 2.0 {
         app.volume += 0.1;
         if let Some(sink) = &app.sink {
@@ -310,7 +310,7 @@ fn handle_volume_up(app: &mut App) {
     }
 }
 
-fn handle_volume_down(app: &mut App) {
+pub fn handle_volume_down(app: &mut App) {
     if app.volume > 0.0 {
         app.volume -= 0.1;
         if let Some(sink) = &app.sink {
