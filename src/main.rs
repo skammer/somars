@@ -557,7 +557,7 @@ pub enum PlaybackState {
          .history
          .iter()
          .rev()
-         .filter(|msg| app.log_level > 1 || matches!(msg.message_type, MessageType::Error) || matches!(msg.message_type, MessageType::Playback))
+         .filter(|msg| app.log_level > 1 || matches!(msg.message_type, MessageType::Error | MessageType::Info | MessageType::Playback))
          .map(|msg| {
              let width = right_chunks[1].width as usize;
              let style = match msg.message_type {
