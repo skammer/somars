@@ -62,7 +62,7 @@ pub struct HistoryMessage {
 #[command(version, about)]
 struct Cli {
     /// Log level (1=minimal, 2=verbose)
-    #[arg(short, long, default_value_t = 1)]
+    #[arg(long, default_value_t = 1)]
     log_level: u8,
     
     /// Station ID to automatically play on startup
