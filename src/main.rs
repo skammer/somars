@@ -121,8 +121,7 @@ pub enum PlaybackState {
 
      // Handle broadcast mode
      if let Some(message) = cli.broadcast {
-         let port = cli.broadcast_port.unwrap_or(cli.port);
-         send_udp_broadcast(&message, port).await?;
+         send_udp_broadcast(&message, cli.port).await?;
          return Ok(());
      }
      use ratatui::widgets::ListState;
@@ -703,10 +702,6 @@ pub enum PlaybackState {
              Line::from(vec![
                  Span::styled("--broadcast <MSG>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
                  Span::raw(" - Send UDP command to network and exit")
-             ]),
-             Line::from(vec![
-                 Span::styled("--broadcast-port <NUM>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Port for broadcast (default: same as --port)")
              ]),
              Line::from(""),
              Line::from("Press ? to close this help screen"),
