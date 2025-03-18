@@ -76,6 +76,14 @@ struct Cli {
     /// Port for UDP control [default: 8069]
     #[arg(short = 'p', long, default_value_t = 8069)]
     port: u16,
+
+    /// Broadcast a UDP command to the network and exit
+    #[arg(long)]
+    broadcast: Option<String>,
+
+    /// Port to broadcast UDP commands to [default: same as --port]
+    #[arg(long)]
+    broadcast_port: Option<u16>,
 }
 
 pub struct App {
@@ -110,6 +118,13 @@ pub enum PlaybackState {
  #[tokio::main]
  async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
      let cli = Cli::parse();
+
+     // Handle broadcast mode
+     if let Some(message) = cli.broadcast {
+         let port = cli.broadcast_port.unwrap_or(cli.port);
+         send_udp_broadcast(&message, port).await?;
+         return Ok(());
+     }
      use ratatui::widgets::ListState;
      // Setup terminal
      enable_raw_mode()?;
@@ -685,6 +700,14 @@ pub enum PlaybackState {
                  Span::styled("--version", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
                  Span::raw(" - Show version information")
              ]),
+             Line::from(vec![
+                 Span::styled("--broadcast <MSG>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Send UDP command to network and exit")
+             ]),
+             Line::from(vec![
+                 Span::styled("--broadcast-port <NUM>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Port for broadcast (default: same as --port)")
+             ]),
              Line::from(""),
              Line::from("Press ? to close this help screen"),
          ];
@@ -704,6 +727,14 @@ pub enum PlaybackState {
      }
 
  }
+
+async fn send_udp_broadcast(message: &str, port: u16) -> io::Result<()> {
+    let socket = UdpSocket::bind("0.0.0.0:0").await?;
+    socket.set_broadcast(true)?;
+    let target_addr = format!("255.255.255.255:{}", port);
+    socket.send_to(message.as_bytes(), &target_addr).await?;
+    Ok(())
+}
 
 async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCommand>) -> io::Result<()> {
     use tokio::net::UdpSocket;
