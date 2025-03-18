@@ -69,9 +69,13 @@ struct Cli {
     #[arg(short, long)]
     station: Option<String>,
 
-    /// Enable UDP control on specified port
-    #[arg(short = 'p', long)]
-    listen: Option<u16>,
+    /// Enable UDP control
+    #[arg(short = 'l', long)]
+    listen: bool,
+
+    /// Port for UDP control [default: 8069]
+    #[arg(short = 'p', long, default_value_t = 8069)]
+    port: u16,
 }
 
 pub struct App {
@@ -139,9 +143,10 @@ pub enum PlaybackState {
      let (command_tx, mut command_rx) = tokio::sync::mpsc::channel(32);
 
      // Start UDP listener if enabled
-     if let Some(port) = cli.listen {
+     if cli.listen {
+         let port = cli.port;
          let command_tx = command_tx.clone();
-         let log_tx = log_tx.clone();  // Add this line
+         let log_tx = log_tx.clone();
          
          // Add this log message before spawning
          let _ = log_tx.send(HistoryMessage {
