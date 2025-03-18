@@ -80,10 +80,6 @@ struct Cli {
     /// Broadcast a UDP command to the network and exit
     #[arg(long)]
     broadcast: Option<String>,
-
-    /// Port to broadcast UDP commands to [default: same as --port]
-    #[arg(long)]
-    broadcast_port: Option<u16>,
 }
 
 pub struct App {
