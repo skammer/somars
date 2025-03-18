@@ -57,6 +57,10 @@ echo "volume 0.5" | nc -u -w0 localhost 5555
 
 # Tune to Groove Salad
 echo "tune groovesalad" | nc -u -w0 localhost 5555
+
+
+# Using socat
+echo "tune groovesalad" | socat -u - udp-datagram:255.255.255.255:8069,reuseport,broadcast
 ```
 
 ## Key Controls
