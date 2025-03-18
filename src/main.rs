@@ -720,6 +720,8 @@ pub enum PlaybackState {
  }
 
 async fn send_udp_broadcast(message: &str, port: u16) -> io::Result<()> {
+    use tokio::net::UdpSocket;
+    
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
     socket.set_broadcast(true)?;
     let target_addr = format!("255.255.255.255:{}", port);
