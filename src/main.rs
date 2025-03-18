@@ -670,8 +670,12 @@ pub enum PlaybackState {
                  Span::raw(" - Auto-play station with given ID on startup")
              ]),
              Line::from(vec![
-                 Span::styled("--listen <PORT>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Enable UDP control on specified port")
+                 Span::styled("--listen", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Enable UDP control listener")
+             ]),
+             Line::from(vec![
+                 Span::styled("--port <NUM>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Set UDP port (default: 8069)")
              ]),
              Line::from(vec![
                  Span::styled("--help", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
