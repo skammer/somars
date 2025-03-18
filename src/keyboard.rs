@@ -120,7 +120,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                         stream,
                         stream_download::storage::bounded::BoundedStorageProvider::new(
                             stream_download::storage::memory::MemoryStorageProvider,
-                            std::num::NonZeroUsize::new(512 * 1024).unwrap(),
+                            std::num::NonZeroUsize::new(1024 * 1024).unwrap(),
                         ),
                         stream_download::Settings::default().prefetch_bytes(prefetch_bytes as u64),
                     )
