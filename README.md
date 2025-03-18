@@ -23,6 +23,9 @@ cargo install --path .
 sudo apt-get install pkg-config libasound2-dev
 ```
 
+**Note:** The default UDP port is 8069. When using `--listen`, ensure the port is available. 
+Use `--port` to specify a different port for both listening and broadcasting.
+
 ## Usage
 
 ```bash
@@ -32,7 +35,9 @@ somars [OPTIONS]
 ### Command Line Options:
 - `--log-level <1|2>` - Log verbosity (1=minimal, 2=verbose)
 - `--station <ID>` - Auto-play station on startup (e.g., `groovesalad`)
-- `--listen <PORT>` - Enable UDP control on specified port
+- `--listen` - Enable UDP control listener
+- `--port <NUM>` - Set UDP port for both listening and broadcasting [default: 8069]
+- `--broadcast <MSG>` - Send UDP command to network and exit
 
 ## UDP Command Interface
 
@@ -49,17 +54,22 @@ tune <ID>   - Switch to station by ID
 
 ### Example: Control via netcat
 ```bash
-# Send play command
-echo "play" | nc -u -w0 localhost 5555
+# Send play command (default port 8069)
+echo "play" | nc -u -w0 localhost 8069
 
-# Set volume to 50%
-echo "volume 0.5" | nc -u -w0 localhost 5555
+# Send to custom port
+echo "volume 0.5" | nc -u -w0 localhost 9070
+```
 
-# Tune to Groove Salad
-echo "tune groovesalad" | nc -u -w0 localhost 5555
+### Example: Broadcast command
+```bash
+# Broadcast stop command to all instances on default port
+somars --broadcast "stop"
 
+# Broadcast to custom port
+somars --port 9070 --broadcast "tune groovesalad"
 
-# Using socat
+# Using socat with broadcast
 echo "tune groovesalad" | socat -u - udp-datagram:255.255.255.255:8069,reuseport,broadcast
 ```
 
