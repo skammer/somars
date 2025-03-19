@@ -649,10 +649,6 @@ pub enum PlaybackState {
                  Span::raw(" - Stop/Start playback")
              ]),
              Line::from(vec![
-                 Span::styled("s", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Stop playback")
-             ]),
-             Line::from(vec![
                  Span::styled("+/-", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
                  Span::raw(" - Adjust volume")
              ]),

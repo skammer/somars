@@ -77,7 +77,6 @@ echo "tune groovesalad" | socat -u - udp-datagram:255.255.255.255:8069,reuseport
 - `↑/↓` - Navigate stations
 - `Enter` - Play selected station
 - `Space` - Toggle pause/play
-- `s` - Stop playback
 - `+/-` - Adjust volume
 - `?` - Toggle help screen
 - `q` - Quit
