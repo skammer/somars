@@ -20,10 +20,6 @@ pub fn handle_key_event(
             handle_play(app, log_tx);
             true
         },
-        KeyCode::Char('s') => {
-            handle_stop(app, false);
-            true
-        },
         KeyCode::Char(' ') => {
             handle_stop(app, true);
             true
