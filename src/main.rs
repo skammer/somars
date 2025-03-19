@@ -282,7 +282,7 @@ pub enum PlaybackState {
              match cmd {
                  ControlCommand::Play => keyboard::handle_play(&mut app, &log_tx),
                  ControlCommand::Pause => keyboard::handle_pause(&mut app),
-                 ControlCommand::Stop => keyboard::handle_stop(&mut app, false),
+                 ControlCommand::Stop => keyboard::handle_stop(&mut app),
                  ControlCommand::VolumeUp => keyboard::handle_volume_up(&mut app),
                  ControlCommand::VolumeDown => keyboard::handle_volume_down(&mut app),
                  ControlCommand::SetVolume(level) => {

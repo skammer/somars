@@ -21,7 +21,16 @@ pub fn handle_key_event(
             true
         },
         KeyCode::Char(' ') => {
-            handle_stop(app, true);
+            match app.playback_state {
+                PlaybackState::Playing => {
+                    handle_stop(app);
+                }
+                PlaybackState::Stopped => {
+                    handle_play(app, log_tx);
+                }
+                PlaybackState::Paused => {}
+            }
+
             true
         },
         KeyCode::Up => {
@@ -218,7 +227,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
     }
 }
 
-pub fn handle_stop(app: &mut App, soft_stop: bool) {
+pub fn handle_stop(app: &mut App) {
     if let Some(sink) = &app.sink {
         if let Ok(sink) = sink.lock() {
             // Keep total_played duration but reset timing state
@@ -236,13 +245,7 @@ pub fn handle_stop(app: &mut App, soft_stop: bool) {
                     }
                     app.last_pause_time = Some(std::time::Instant::now());
                 }
-                PlaybackState::Stopped => {
-                    if soft_stop {
-                        sink.play();
-                        app.playback_state = PlaybackState::Playing;
-                        app.playback_start_time = Some(std::time::Instant::now());
-                    }
-                }
+                PlaybackState::Stopped => {}
                 PlaybackState::Paused => {}
             }
         }
