@@ -275,7 +275,7 @@ pub fn handle_pause(app: &mut App) {
     }
 }
 
-fn handle_up(app: &mut App) {
+pub fn handle_up(app: &mut App) {
     if let Some(selected) = app.selected_station.selected() {
         if selected > 0 {
             app.selected_station.select(Some(selected - 1));
@@ -285,7 +285,7 @@ fn handle_up(app: &mut App) {
     }
 }
 
-fn handle_down(app: &mut App) {
+pub fn handle_down(app: &mut App) {
     if !app.loading {
         if let Some(selected) = app.selected_station.selected() {
             if selected < app.stations.len() - 1 {

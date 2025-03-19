@@ -34,6 +34,8 @@ enum ControlCommand {
     Tune(String),
     TuneNext,
     TunePrev,
+    SelectUp,
+    SelectDown,
 }
 use rodio::{OutputStream, Sink};
 
@@ -324,6 +326,12 @@ pub enum PlaybackState {
                          app.selected_station.select(Some(new_index));
                          keyboard::handle_play(&mut app, &log_tx);
                      }
+                 }
+                 ControlCommand::SelectUp => {
+                     keyboard::handle_up(app);
+                 }
+                 ControlCommand::SelectDown => {
+                     keyboard::handle_down(app);
                  }
              }
          }
@@ -771,6 +779,8 @@ async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCom
             ["tune", id] => ControlCommand::Tune(id.to_string()),
             ["tune-next"] => ControlCommand::TuneNext,
             ["tune-prev"] => ControlCommand::TunePrev,
+            ["select-up"] => ControlCommand::SelectUp,
+            ["select-down"] => ControlCommand::SelectDown,
             _ => continue,
         };
         
