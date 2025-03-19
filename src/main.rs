@@ -328,10 +328,10 @@ pub enum PlaybackState {
                      }
                  }
                  ControlCommand::SelectUp => {
-                     keyboard::handle_up(app);
+                     keyboard::handle_up(&mut app);
                  }
                  ControlCommand::SelectDown => {
-                     keyboard::handle_down(app);
+                     keyboard::handle_down(&mut app);
                  }
              }
          }
