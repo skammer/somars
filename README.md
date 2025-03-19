@@ -50,6 +50,8 @@ volume up    - Increase volume by 10%
 volume down  - Decrease volume by 10%
 volume <N>   - Set volume (0.0-2.0)
 tune <ID>   - Switch to station by ID
+tune-next   - Switch to next station (wraps around)
+tune-prev   - Switch to previous station (wraps around)
 ```
 
 ### Example: Control via netcat

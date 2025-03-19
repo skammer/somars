@@ -32,6 +32,8 @@ enum ControlCommand {
     VolumeDown,
     SetVolume(f32),
     Tune(String),
+    TuneNext,
+    TunePrev,
 }
 use rodio::{OutputStream, Sink};
 
@@ -296,6 +298,30 @@ pub enum PlaybackState {
                  ControlCommand::Tune(station_id) => {
                      if let Some(index) = app.stations.iter().position(|s| s.id == station_id) {
                          app.selected_station.select(Some(index));
+                         keyboard::handle_play(&mut app, &log_tx);
+                     }
+                 }
+                 ControlCommand::TuneNext => {
+                     if !app.stations.is_empty() {
+                         let current = app.selected_station.selected().unwrap_or(0);
+                         let new_index = if current == app.stations.len() - 1 {
+                             0
+                         } else {
+                             current + 1
+                         };
+                         app.selected_station.select(Some(new_index));
+                         keyboard::handle_play(&mut app, &log_tx);
+                     }
+                 }
+                 ControlCommand::TunePrev => {
+                     if !app.stations.is_empty() {
+                         let current = app.selected_station.selected().unwrap_or(0);
+                         let new_index = if current == 0 {
+                             app.stations.len() - 1
+                         } else {
+                             current - 1
+                         };
+                         app.selected_station.select(Some(new_index));
                          keyboard::handle_play(&mut app, &log_tx);
                      }
                  }
@@ -743,6 +769,8 @@ async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCom
                 ControlCommand::SetVolume(1.0)
             }),
             ["tune", id] => ControlCommand::Tune(id.to_string()),
+            ["tune-next"] => ControlCommand::TuneNext,
+            ["tune-prev"] => ControlCommand::TunePrev,
             _ => continue,
         };
         
