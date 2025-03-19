@@ -25,8 +25,7 @@ pub fn handle_key_event(
             true
         },
         KeyCode::Char(' ') => {
-            // handle_stop(app, true);
-            handle_pause(app);
+            handle_stop(app, true);
             true
         },
         KeyCode::Up => {
