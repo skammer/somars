@@ -1,6 +1,6 @@
 [package]
 name = "somars"
-version = "0.1.1"  # Changed from 0.1.0
+version = "0.1.2"
 edition = "2021"
 authors = ["Max Vasiliev <max@vasiliev.me>"]
 description = "A rusty soma.fm player"
