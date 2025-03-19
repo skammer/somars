@@ -370,8 +370,6 @@ pub enum PlaybackState {
          Span::raw(":Play "),
          Span::styled("Space", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD)),
          Span::raw(":Stop/Start "),
-         Span::styled("s", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Stop "),
          Span::styled("+/-", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::BOLD)),
          Span::raw(":Vol "),
          Span::styled("?", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
