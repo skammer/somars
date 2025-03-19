@@ -68,7 +68,7 @@ struct Cli {
     /// Log level (1=minimal, 2=verbose)
     #[arg(long, default_value_t = 1)]
     log_level: u8,
-    
+
     /// Station ID to automatically play on startup
     #[arg(short, long)]
     station: Option<String>,
@@ -82,7 +82,7 @@ struct Cli {
     port: u16,
 
     /// Broadcast a UDP command to the network and exit
-    #[arg(long)]
+    #[arg(short = 'b', long)]
     broadcast: Option<String>,
 }
 

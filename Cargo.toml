@@ -4,7 +4,7 @@ version = "0.1.2"
 edition = "2021"
 authors = ["Max Vasiliev <max@vasiliev.me>"]
 description = "A rusty soma.fm player"
-license = "MIT" 
+license = "MIT"
 # repository = "https://github.com/yourusername/somars"  # Optional
 
 [dependencies]
