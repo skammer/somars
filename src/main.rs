@@ -776,9 +776,9 @@ async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCom
             ["volume", num] => num.parse().ok().map(ControlCommand::SetVolume).unwrap_or_else(|| {
                 ControlCommand::SetVolume(1.0)
             }),
+            ["tune", "next"] => ControlCommand::TuneNext,
+            ["tune", "prev"] => ControlCommand::TunePrev,
             ["tune", id] => ControlCommand::Tune(id.to_string()),
-            ["tune-next"] => ControlCommand::TuneNext,
-            ["tune-prev"] => ControlCommand::TunePrev,
             ["select", "up"] => ControlCommand::SelectUp,
             ["select", "down"] => ControlCommand::SelectDown,
             _ => continue,
