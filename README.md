@@ -85,6 +85,16 @@ echo "tune groovesalad" | socat -u - udp-datagram:255.255.255.255:8069,reuseport
 - `?` - Toggle help screen
 - `q` - Quit
 
+
+## Alsa errors
+
+If you are getting errors that look like `ALSA lib pcm.c: 8526: (snd_pcm_recover) underrun occurred` being printed in terminal, try adding the following to `/etc/default/alsa`:
+
+```
+default-fragments = 5
+default-fragment-size-msec = 2
+```
+
 ## License
 MIT License
 
