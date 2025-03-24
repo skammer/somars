@@ -95,6 +95,16 @@ default-fragments = 5
 default-fragment-size-msec = 2
 ```
 
+```
+
+/etc/pulse/daemon.conf:
+
+CODE: SELECT ALL
+default-fragments = 5
+default-fragment-size-msec = 2
+
+```
+
 ## License
 MIT License
 
