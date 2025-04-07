@@ -252,28 +252,6 @@ pub fn handle_stop(app: &mut App) {
     }
 }
 
-pub fn handle_pause(app: &mut App) {
-    if let Some(sink) = &app.sink {
-        if let Ok(sink) = sink.lock() {
-            match app.playback_state {
-                PlaybackState::Playing => {
-                    sink.pause();
-                    app.playback_state = PlaybackState::Paused;
-                    if let Some(start) = app.playback_start_time.take() {
-                        app.total_played += start.elapsed();
-                    }
-                    app.last_pause_time = Some(std::time::Instant::now());
-                }
-                PlaybackState::Paused => {
-                    sink.play();
-                    app.playback_state = PlaybackState::Playing;
-                    app.playback_start_time = Some(std::time::Instant::now());
-                }
-                PlaybackState::Stopped => {}
-            }
-        }
-    }
-}
 
 pub fn handle_up(app: &mut App) {
     if let Some(selected) = app.selected_station.selected() {
