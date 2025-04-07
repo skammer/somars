@@ -54,6 +54,7 @@ tune next   - Switch to next station (wraps around)
 tune prev   - Switch to previous station (wraps around)
 select up    - Move selection up in station list
 select down  - Move selection down in station list
+toggle       - Toggle between play and stop
 ```
 
 ### Example: Control via netcat
