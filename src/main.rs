@@ -26,7 +26,6 @@ use std::{
 #[derive(Debug)]
 enum ControlCommand {
     Play,
-    Pause,
     Stop,
     VolumeUp,
     VolumeDown,
@@ -286,7 +285,6 @@ pub enum PlaybackState {
          while let Ok(cmd) = command_rx.try_recv() {
              match cmd {
                  ControlCommand::Play => keyboard::handle_play(&mut app, &log_tx),
-                 ControlCommand::Pause => keyboard::handle_pause(&mut app),
                  ControlCommand::Stop => keyboard::handle_stop(&mut app),
                  ControlCommand::VolumeUp => keyboard::handle_volume_up(&mut app),
                  ControlCommand::VolumeDown => keyboard::handle_volume_down(&mut app),
@@ -777,7 +775,6 @@ async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCom
         
         let cmd = match msg.split_whitespace().collect::<Vec<_>>().as_slice() {
             ["play"] => ControlCommand::Play,
-            ["pause"] => ControlCommand::Pause,
             ["stop"] => ControlCommand::Stop,
             ["volume", "up"] => ControlCommand::VolumeUp,
             ["volume", "down"] => ControlCommand::VolumeDown,

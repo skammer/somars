@@ -44,7 +44,6 @@ somars [OPTIONS]
 ### Supported Commands:
 ```
 play        - Start/resume playback
-pause       - Pause playback
 stop        - Stop playback
 volume up    - Increase volume by 10%
 volume down  - Decrease volume by 10%
