@@ -43,14 +43,6 @@ static CURRENT_LOCALE: Lazy<RwLock<String>> = Lazy::new(|| {
 
 // Initialize i18n system
 pub fn init() {
-    // Print environment variables for debugging
-    if let Ok(lang) = std::env::var("LANG") {
-        eprintln!("DEBUG: LANG env var = {}", lang);
-    }
-    if let Ok(lc_all) = std::env::var("LC_ALL") {
-        eprintln!("DEBUG: LC_ALL env var = {}", lc_all);
-    }
-    
     BUNDLES.with(|bundles| {
         let mut bundles = bundles.borrow_mut();
         
@@ -93,8 +85,6 @@ pub fn set_locale(requested: &[&str]) {
             // Make sure the bundles are initialized for this thread
             init();
             
-            // Debug output
-            eprintln!("DEBUG: Locale set to: {}", locale_str);
         }
     }
 }
