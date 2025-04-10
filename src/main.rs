@@ -344,22 +344,6 @@ pub enum PlaybackState {
                          keyboard::handle_stop(&mut app);
                      }
                  }
-                 ControlCommand::ToggleLanguage => {
-                     // Toggle between English and Russian
-                     let current = i18n::get_current_locale_code();
-                     if current == "en" {
-                         i18n::set_locale(&["ru"]);
-                     } else {
-                         i18n::set_locale(&["en"]);
-                     }
-                     
-                     // Log the language change
-                     let _ = log_tx.send(HistoryMessage {
-                         message: format!("Language changed to: {}", i18n::get_current_locale_code()),
-                         message_type: MessageType::System,
-                         timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                     }).await;
-                 }
              }
          }
 

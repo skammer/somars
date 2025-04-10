@@ -4,7 +4,6 @@ use stream_download::http::reqwest::Client as StreamClient;
 use icy_metadata::RequestIcyMetadata;
 use tokio::sync::mpsc::Sender;
 use std::time::Instant;
-use crate::i18n;
 
 pub fn handle_key_event(
     key: KeyCode, 
