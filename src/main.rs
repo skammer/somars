@@ -88,9 +88,9 @@ struct Cli {
     #[arg(short = 'b', long)]
     broadcast: Option<String>,
     
-    /// Set language (en, ru) [default: en]
-    #[arg(long, default_value = "en")]
-    lang: String,
+    /// Set language (en, ru)
+    #[arg(long)]
+    lang: Option<String>,
 }
 
 pub struct App {
@@ -130,10 +130,11 @@ pub enum PlaybackState {
      i18n::init();
      
      // Command line language option overrides environment
-     if !cli.lang.is_empty() {
-         i18n::set_locale(&[&cli.lang]);
+     if let Some(lang) = cli.lang {
+         if !lang.is_empty() {
+             i18n::set_locale(&[&lang.to_string()]);
+         }
      }
-     
      // Print the current locale for debugging
      eprintln!("Current locale: {}", i18n::get_current_locale_code());
 
