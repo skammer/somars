@@ -2,7 +2,7 @@ use fluent::{FluentBundle, FluentResource};
 use fluent_langneg::{negotiate_languages, NegotiationStrategy};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
 use unic_langid::{langid, LanguageIdentifier};
 
 // Define supported languages
@@ -14,12 +14,12 @@ pub static LOCALES: Lazy<Vec<LanguageIdentifier>> = Lazy::new(|| vec![
 // Default language
 pub static DEFAULT_LOCALE: Lazy<LanguageIdentifier> = Lazy::new(|| langid!("en"));
 
-// Store bundles for each locale
-static BUNDLES: Lazy<RwLock<HashMap<LanguageIdentifier, FluentBundle<FluentResource>>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
+// Store bundles for each locale - using Mutex instead of RwLock for thread safety
+static BUNDLES: Lazy<Mutex<HashMap<String, FluentBundle<FluentResource>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 // Current locale
-static CURRENT_LOCALE: Lazy<RwLock<LanguageIdentifier>> = Lazy::new(|| RwLock::new(DEFAULT_LOCALE.clone()));
+static CURRENT_LOCALE: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new("en".to_string()));
 
 // Initialize i18n system
 pub fn init() {
@@ -42,38 +42,27 @@ pub fn init() {
         .expect("Failed to add Russian resource to bundle");
     
     // Store bundles
-    let mut bundles = BUNDLES.write().unwrap();
-    bundles.insert(langid!("en"), en_bundle);
-    bundles.insert(langid!("ru"), ru_bundle);
+    let mut bundles = BUNDLES.lock().unwrap();
+    bundles.insert("en".to_string(), en_bundle);
+    bundles.insert("ru".to_string(), ru_bundle);
 }
 
 // Set current locale based on requested languages
 pub fn set_locale(requested: &[&str]) {
-    let requested_locales: Vec<LanguageIdentifier> = requested
-        .iter()
-        .filter_map(|locale| locale.parse().ok())
-        .collect();
-    
-    let default = vec![DEFAULT_LOCALE.clone()];
-    let available = LOCALES.iter().cloned().collect::<Vec<_>>();
-    
-    let negotiated = negotiate_languages(
-        &requested_locales,
-        &available,
-        Some(&default),
-        NegotiationStrategy::Filtering,
-    );
-    
-    if let Some(locale) = negotiated.first() {
-        let mut current = CURRENT_LOCALE.write().unwrap();
-        *current = locale.clone();
+    // Simplified approach - just use the first requested locale if supported
+    if let Some(locale) = requested.first() {
+        let locale_str = locale.to_string();
+        if locale_str == "en" || locale_str == "ru" {
+            let mut current = CURRENT_LOCALE.write().unwrap();
+            *current = locale_str;
+        }
     }
 }
 
 // Get translation for a key
 pub fn get_message(key: &str) -> String {
     let current_locale = CURRENT_LOCALE.read().unwrap().clone();
-    let bundles = BUNDLES.read().unwrap();
+    let bundles = BUNDLES.lock().unwrap();
     
     if let Some(bundle) = bundles.get(&current_locale) {
         if let Some(message) = bundle.get_message(key) {
@@ -93,8 +82,7 @@ pub fn get_message(key: &str) -> String {
 
 // Get current locale code (e.g., "en", "ru")
 pub fn get_current_locale_code() -> String {
-    let current = CURRENT_LOCALE.read().unwrap();
-    current.language.to_string()
+    CURRENT_LOCALE.read().unwrap().clone()
 }
 
 // Shorthand function for translation
