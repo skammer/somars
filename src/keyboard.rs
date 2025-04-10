@@ -1,9 +1,10 @@
-use crate::{App, MessageType, PlaybackState, HistoryMessage};
+use crate::{App, MessageType, PlaybackState, HistoryMessage, ControlCommand};
 use crossterm::event::KeyCode;
 use stream_download::http::reqwest::Client as StreamClient;
 use icy_metadata::RequestIcyMetadata;
 use tokio::sync::mpsc::Sender;
 use std::time::Instant;
+use crate::i18n;
 
 pub fn handle_key_event(
     key: KeyCode, 
@@ -61,6 +62,23 @@ pub fn handle_key_event(
             handle_history_scroll_up(app);
             true
         },
+        KeyCode::Char('l') => {
+            // Toggle language
+            let current = i18n::get_current_locale_code();
+            if current == "en" {
+                i18n::set_locale(&["ru"]);
+            } else {
+                i18n::set_locale(&["en"]);
+            }
+            
+            // Log the language change
+            let _ = log_tx.send(HistoryMessage {
+                message: format!("Language changed to: {}", i18n::get_current_locale_code()),
+                message_type: MessageType::System,
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+            });
+            true
+        },
         _ => false
     }
 }
@@ -107,7 +125,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                         }
                     };
 
-                    add_log(format!("Initializing stream from: {}", &station_url), MessageType::System).await;
+                    add_log(format!("{}", t("stream-from").replace("{$url}", &station_url)), MessageType::System).await;
                     // We need to add a header to tell the Icecast server that we can parse the metadata embedded
                     // within the stream itself.
                     let client = StreamClient::builder().request_icy_metadata().build()?;
@@ -130,7 +148,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                     )
                     .await {
                         Ok(reader) => {
-                            add_log("Got response, starting stream...".to_string(), MessageType::Background).await;
+                            add_log(t("got-response"), MessageType::Background).await;
                             Ok(reader)
                         },
                         Err(e) => {
@@ -139,7 +157,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                         }
                     };
 
-                    add_log(format!("Bit rate: {:?}kbps", icy_headers.bitrate().unwrap()), MessageType::System).await;
+                    add_log(t("bit-rate").replace("{$rate}", &format!("{:?}", icy_headers.bitrate().unwrap())), MessageType::System).await;
 
                     // Start new playback
                     let playback_success = match reader {
@@ -184,15 +202,15 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                             true
                         },
                         Err(_) => {
-                            let _ = add_log("Failed to start playback".to_string(), MessageType::Error).await;
+                            let _ = add_log(t("failed-playback"), MessageType::Error).await;
                             false
                         },
                     };
 
                     if playback_success {
-                        add_log("Playback started".to_string(), MessageType::System).await;
+                        add_log(t("playback-started"), MessageType::System).await;
                     } else {
-                        add_log("Failed to lock audio sink".to_string(), MessageType::Error).await;
+                        add_log(t("failed-audio-sink"), MessageType::Error).await;
                     }
 
                     Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
@@ -205,18 +223,18 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                     let log_tx_clone_2 = log_tx_clone.clone();
                     if let Err(e) = handle.await {
                         let _ = log_tx_clone_2.send(HistoryMessage {
-                            message: format!("Playback error: {}", e),
+                            message: t("playback-error").replace("{$error}", &e.to_string()),
                             message_type: MessageType::Error,
                             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                         }).await;
                     } else {
                         let _ = log_tx_clone_2.send(HistoryMessage {
-                            message: format!("Starting playback of {}", &station_title_error),
+                            message: t("starting-playback").replace("{$station}", &station_title_error),
                             message_type: MessageType::System,
                             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                         }).await;
                         let _ = log_tx_clone_2.send(HistoryMessage {
-                            message: "Connecting to stream...".to_string(),
+                            message: t("connecting-to-stream"),
                             message_type: MessageType::System,
                             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                         }).await;

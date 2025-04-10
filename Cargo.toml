@@ -28,6 +28,11 @@ stream-download = { version = "0.14.1", features = [
 url = "2.5.4"
 minimp3 = "0.5.1"
 icy-metadata = { version = "0.2.1", features = ["serde", "reqwest"] }
+fluent = "0.16.0"
+fluent-bundle = "0.15.2"
+fluent-langneg = "0.13.0"
+unic-langid = { version = "0.9.1", features = ["macros"] }
+once_cell = "1.18.0"
 
 # https://github.com/johnthagen/min-sized-rust
 [profile.release]

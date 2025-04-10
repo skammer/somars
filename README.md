@@ -38,6 +38,7 @@ somars [OPTIONS]
 - `--listen` - Enable UDP control listener
 - `--port <NUM>` - Set UDP port for both listening and broadcasting [default: 8069]
 - `--broadcast <MSG>` - Send UDP command to network and exit
+- `--lang <CODE>` - Set language (en, ru) [default: en]
 
 ## UDP Command Interface
 
@@ -54,6 +55,8 @@ tune prev   - Switch to previous station (wraps around)
 select up    - Move selection up in station list
 select down  - Move selection down in station list
 toggle       - Toggle between play and stop
+language    - Toggle between English and Russian
+lang        - Same as language
 ```
 
 ### Example: Control via netcat
@@ -83,6 +86,7 @@ echo "tune groovesalad" | socat -u - udp-datagram:255.255.255.255:8069,reuseport
 - `Space` - Toggle pause/play
 - `+/-` - Adjust volume
 - `?` - Toggle help screen
+- `l` - Toggle language (English/Russian)
 - `q` - Quit
 
 

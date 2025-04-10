@@ -36,6 +36,7 @@ enum ControlCommand {
     SelectUp,
     SelectDown,
     Toggle,
+    ToggleLanguage,
 }
 use rodio::{OutputStream, Sink};
 
@@ -44,6 +45,8 @@ use crate::station::Station;
 
 mod mp3_stream_decoder;
 mod keyboard;
+mod i18n;
+use i18n::t;
 
 
 
@@ -84,6 +87,10 @@ struct Cli {
     /// Broadcast a UDP command to the network and exit
     #[arg(short = 'b', long)]
     broadcast: Option<String>,
+    
+    /// Set language (en, ru) [default: en]
+    #[arg(long, default_value = "en")]
+    lang: String,
 }
 
 pub struct App {
@@ -118,6 +125,10 @@ pub enum PlaybackState {
  #[tokio::main]
  async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
      let cli = Cli::parse();
+     
+     // Initialize i18n
+     i18n::init();
+     i18n::set_locale(&[&cli.lang]);
 
      // Handle broadcast mode
      if let Some(message) = cli.broadcast {
@@ -164,7 +175,7 @@ pub enum PlaybackState {
          
          // Add this log message before spawning
          let _ = log_tx.send(HistoryMessage {
-             message: format!("Starting UDP command listener on port {}", port),
+             message: t("udp-starting").replace("{$port}", &port.to_string()),
              message_type: MessageType::Info,
              timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
          }).await;
@@ -174,7 +185,7 @@ pub enum PlaybackState {
                  eprintln!("UDP listener error: {}", e);
                  // Add error logging here too
                  let _ = log_tx.send(HistoryMessage {
-                     message: format!("UDP error: {}", e),
+                     message: t("udp-error").replace("{$error}", &e.to_string()),
                      message_type: MessageType::Error,
                      timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                  }).await;
@@ -249,13 +260,13 @@ pub enum PlaybackState {
                                  keyboard::handle_play(&mut app, &log_tx);
 
                                  app.history.push(HistoryMessage {
-                                     message: format!("Auto-playing station: {}", station_id),
+                                     message: t("auto-playing").replace("{$id}", station_id),
                                      message_type: MessageType::System,
                                      timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                                  });
                              } else {
                                  app.history.push(HistoryMessage {
-                                     message: format!("Station ID not found: {}", station_id),
+                                     message: t("station-not-found").replace("{$id}", station_id),
                                      message_type: MessageType::Error,
                                      timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                                  });
@@ -339,6 +350,22 @@ pub enum PlaybackState {
                          keyboard::handle_stop(&mut app);
                      }
                  }
+                 ControlCommand::ToggleLanguage => {
+                     // Toggle between English and Russian
+                     let current = i18n::get_current_locale_code();
+                     if current == "en" {
+                         i18n::set_locale(&["ru"]);
+                     } else {
+                         i18n::set_locale(&["en"]);
+                     }
+                     
+                     // Log the language change
+                     let _ = log_tx.send(HistoryMessage {
+                         message: format!("Language changed to: {}", i18n::get_current_locale_code()),
+                         message_type: MessageType::System,
+                         timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                     }).await;
+                 }
              }
          }
 
@@ -405,15 +432,17 @@ pub enum PlaybackState {
      // Bottom controls bar
      let bottom_controls = Line::from(vec![
          Span::styled("q", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Quit "),
+         Span::raw(format!(":{} ", t("controls-quit"))),
          Span::styled("↵", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Play "),
+         Span::raw(format!(":{} ", t("controls-play"))),
          Span::styled("Space", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Stop/Start "),
+         Span::raw(format!(":{}/{} ", t("controls-stop"), t("controls-start"))),
          Span::styled("+/-", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Vol "),
+         Span::raw(format!(":{} ", t("controls-volume"))),
          Span::styled("?", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(":Help"),
+         Span::raw(format!(":{} ", t("controls-help"))),
+         Span::styled("l", Style::default().fg(Color::White).add_modifier(ratatui::style::Modifier::BOLD)),
+         Span::raw(format!(":Lang ({})", i18n::get_current_locale_code())),
      ]);
 
 
@@ -466,11 +495,11 @@ pub enum PlaybackState {
          let loading_text = vec![
              Line::from(vec![
                  Span::raw(app.spinner_frames[app.spinner_state]),
-                 Span::raw(" Loading stations..."),
+                 Span::raw(format!(" {}", t("loading-stations"))),
              ]),
          ];
          let loading_para = Paragraph::new(loading_text)
-             .block(Block::default().borders(Borders::ALL).title("Loading"))
+             .block(Block::default().borders(Borders::ALL).title(t("loading")))
              .alignment(ratatui::layout::Alignment::Center);
          f.render_widget(loading_para, chunks[0]);
      } else {
@@ -493,7 +522,7 @@ pub enum PlaybackState {
          let stations_list = List::new(station_items)
              .block(
                  Block::bordered()
-                     .title(Line::from(format!("Stations")))
+                     .title(Line::from(t("stations")))
                      .title(Line::from("[↓↑]").right_aligned())
                      .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)).right_aligned())
              )
@@ -523,26 +552,26 @@ pub enum PlaybackState {
          if let Some(station) = app.stations.get(index) {
              Paragraph::new(vec![
                  Line::from(vec![
-                     Span::styled("ID: ", Style::default().fg(Color::Yellow)),
+                     Span::styled(format!("{}: ", t("station-id")), Style::default().fg(Color::Yellow)),
                      Span::raw(&station.id),
                  ]),
                  Line::from(vec![
-                     Span::styled("Title: ", Style::default().fg(Color::Yellow)),
+                     Span::styled(format!("{}: ", t("station-title")), Style::default().fg(Color::Yellow)),
                      Span::raw(&station.title),
                  ]),
                  Line::from(vec![
-                     Span::styled("Genre: ", Style::default().fg(Color::Yellow)),
+                     Span::styled(format!("{}: ", t("station-genre")), Style::default().fg(Color::Yellow)),
                      Span::raw(&station.genre),
                  ]),
                  Line::from(vec![
-                     Span::styled("DJ: ", Style::default().fg(Color::Yellow)),
+                     Span::styled(format!("{}: ", t("station-dj")), Style::default().fg(Color::Yellow)),
                      Span::raw(&station.dj),
                  ]),
                  Line::from(""),
                  Line::from(Span::raw(&station.description)),
                  Line::from(""),
                  Line::from(vec![
-                     Span::styled("Playback time: ", Style::default().fg(Color::Yellow)),
+                     Span::styled(format!("{}: ", t("playback-time")), Style::default().fg(Color::Yellow)),
                      Span::raw({
                          let total = match app.playback_state {
                              PlaybackState::Playing => {
@@ -561,10 +590,10 @@ pub enum PlaybackState {
              ])
              .wrap(ratatui::widgets::Wrap { trim: true })
          } else {
-             Paragraph::new(vec![Line::from("No station selected")])
+             Paragraph::new(vec![Line::from(t("no-station-selected"))])
          }
      } else {
-         Paragraph::new(vec![Line::from("No station selected")])
+         Paragraph::new(vec![Line::from(t("no-station-selected"))])
      }
      .block(Block::default().borders(Borders::ALL)
          .title(Line::from(vec![
@@ -576,9 +605,9 @@ pub enum PlaybackState {
                  Span::raw("["),
                  Span::styled(
                      match app.playback_state {
-                         PlaybackState::Playing => "Playing",
-                         PlaybackState::Paused => "Paused",
-                         PlaybackState::Stopped => "Stopped",
+                         PlaybackState::Playing => t("playing"),
+                         PlaybackState::Paused => t("paused"),
+                         PlaybackState::Stopped => t("stopped"),
                      },
                      match app.playback_state {
                          PlaybackState::Playing => Style::default().fg(Color::Green),
@@ -599,7 +628,7 @@ pub enum PlaybackState {
 
          .title_bottom(
              Line::from(
-                 format!("[Volume: {:.1}]", if app.volume.abs() < 0.05 { 0.0 } else { app.volume })
+                 format!("[{}: {:.1}]", t("volume"), if app.volume.abs() < 0.05 { 0.0 } else { app.volume })
                  ).centered()
              )
          );
@@ -662,7 +691,7 @@ pub enum PlaybackState {
      let history_list = List::new(history_items).direction(ListDirection::BottomToTop)
          .block(Block::default()
              .borders(Borders::ALL)
-             .title("History")
+             .title(t("history"))
              .title(Line::from("[jk]").right_aligned())
              .title_bottom(Line::from(format!("[{} / {}]", selected_history_pos, total_history)).right_aligned())
          )
@@ -672,75 +701,83 @@ pub enum PlaybackState {
      if app.show_help {
          let help_text = vec![
              Line::from(vec![
-                 Span::styled(format!("{} - {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_DESCRIPTION")), 
+                 Span::styled(format!("{} - {}", env!("CARGO_PKG_NAME"), t("app-description")), 
                      Style::default().add_modifier(ratatui::style::Modifier::BOLD))
              ]),
              Line::from(""),
-             Line::from("Keyboard Controls:"),
+             Line::from(t("help-keyboard")),
              Line::from(""),
              Line::from(vec![
                  Span::styled("↵ (Enter)", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Play selected station")
+                 Span::raw(format!(" - {}", t("help-enter")))
              ]),
              Line::from(vec![
                  Span::styled("Space", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Stop/Start playback")
+                 Span::raw(format!(" - {}", t("help-space")))
              ]),
              Line::from(vec![
                  Span::styled("+/-", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Adjust volume")
+                 Span::raw(format!(" - {}", t("help-volume")))
              ]),
              Line::from(vec![
                  Span::styled("↑/↓", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Navigate stations")
+                 Span::raw(format!(" - {}", t("help-arrows")))
              ]),
              Line::from(vec![
                  Span::styled("q", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Quit application")
+                 Span::raw(format!(" - {}", t("help-quit")))
              ]),
              Line::from(vec![
                  Span::styled("?", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Toggle this help screen")
+                 Span::raw(format!(" - {}", t("help-toggle-help")))
+             ]),
+             Line::from(vec![
+                 Span::styled("l", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Toggle language (en/ru)")
              ]),
              Line::from(""),
-             Line::from("Command Line Arguments:"),
+             Line::from(t("help-cli")),
              Line::from(""),
              Line::from(vec![
                  Span::styled("--log-level <1|2>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Set log verbosity (1=minimal, 2=verbose)")
+                 Span::raw(format!(" - {}", t("help-log-level")))
              ]),
              Line::from(vec![
                  Span::styled("--station <ID>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Auto-play station with given ID on startup")
+                 Span::raw(format!(" - {}", t("help-station")))
              ]),
              Line::from(vec![
                  Span::styled("--listen", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Enable UDP control listener")
+                 Span::raw(format!(" - {}", t("help-listen")))
              ]),
              Line::from(vec![
                  Span::styled("--port <NUM>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Set UDP port (default: 8069)")
+                 Span::raw(format!(" - {}", t("help-port")))
              ]),
              Line::from(vec![
                  Span::styled("--help", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Show command line help")
+                 Span::raw(format!(" - {}", t("help-show-help")))
              ]),
              Line::from(vec![
                  Span::styled("--version", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Show version information")
+                 Span::raw(format!(" - {}", t("help-version")))
              ]),
              Line::from(vec![
                  Span::styled("--broadcast <MSG>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Send UDP command to network and exit")
+                 Span::raw(format!(" - {}", t("help-broadcast")))
+             ]),
+             Line::from(vec![
+                 Span::styled("--lang <CODE>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                 Span::raw(" - Set language (en, ru)")
              ]),
              Line::from(""),
-             Line::from("Press ? to close this help screen"),
+             Line::from(t("help-close")),
          ];
 
          let area = popup_area(f.area(), 60, 60);
          let help_widget = Paragraph::new(help_text)
              .block(Block::default()
-                 .title("Help")
+                 .title(t("help-title"))
                  .title_bottom(Line::from(format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))).right_aligned())
                  .borders(Borders::ALL)
                  .border_type(ratatui::widgets::BorderType::Double))
@@ -787,6 +824,8 @@ async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCom
             ["select", "up"] => ControlCommand::SelectUp,
             ["select", "down"] => ControlCommand::SelectDown,
             ["toggle"] => ControlCommand::Toggle,
+            ["language"] => ControlCommand::ToggleLanguage,
+            ["lang"] => ControlCommand::ToggleLanguage,
             _ => continue,
         };
         
