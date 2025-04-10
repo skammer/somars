@@ -1,4 +1,4 @@
-use crate::{App, MessageType, PlaybackState, HistoryMessage, ControlCommand, t};
+use crate::{App, MessageType, PlaybackState, HistoryMessage, t};
 use crossterm::event::KeyCode;
 use stream_download::http::reqwest::Client as StreamClient;
 use icy_metadata::RequestIcyMetadata;
