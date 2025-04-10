@@ -29,11 +29,18 @@ static CURRENT_LOCALE: Lazy<RwLock<String>> = Lazy::new(|| {
             // Check if it's a supported locale
             if lang_code == "ru" || lang_code == "en" {
                 return RwLock::new(lang_code.to_string());
+            } else {
+                // Default to English if not found or not supported
+                return RwLock::new("en".to_string());
             }
+        } else {
+            // Default to English if not found or not supported
+            return RwLock::new("en".to_string());
         }
+    } else {
+        // Default to English if not found or not supported
+        return RwLock::new("en".to_string())
     }
-    // Default to English if not found or not supported
-    RwLock::new("en".to_string())
 });
 
 // Initialize i18n system
