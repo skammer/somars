@@ -128,7 +128,11 @@ pub enum PlaybackState {
      
      // Initialize i18n
      i18n::init();
-     i18n::set_locale(&[&cli.lang]);
+     
+     // Command line language option overrides environment
+     if !cli.lang.is_empty() {
+         i18n::set_locale(&[&cli.lang]);
+     }
 
      // Handle broadcast mode
      if let Some(message) = cli.broadcast {

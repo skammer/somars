@@ -20,8 +20,21 @@ thread_local! {
     static BUNDLES: RefCell<HashMap<String, FluentBundle<FluentResource>>> = RefCell::new(HashMap::new());
 }
 
-// Current locale
-static CURRENT_LOCALE: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new("en".to_string()));
+// Current locale - initialized from environment or defaults to "en"
+static CURRENT_LOCALE: Lazy<RwLock<String>> = Lazy::new(|| {
+    // Try to get locale from LANG environment variable
+    if let Ok(lang) = std::env::var("LANG") {
+        // Parse the locale string (e.g., "en_US.UTF-8" -> "en")
+        if let Some(lang_code) = lang.split('_').next() {
+            // Check if it's a supported locale
+            if lang_code == "ru" || lang_code == "en" {
+                return RwLock::new(lang_code.to_string());
+            }
+        }
+    }
+    // Default to English if not found or not supported
+    RwLock::new("en".to_string())
+});
 
 // Initialize i18n system
 pub fn init() {
