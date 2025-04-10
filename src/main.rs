@@ -36,7 +36,6 @@ enum ControlCommand {
     SelectUp,
     SelectDown,
     Toggle,
-    ToggleLanguage,
 }
 use rodio::{OutputStream, Sink};
 
@@ -87,10 +86,6 @@ struct Cli {
     /// Broadcast a UDP command to the network and exit
     #[arg(short = 'b', long)]
     broadcast: Option<String>,
-    
-    /// Set language (en, ru)
-    #[arg(long)]
-    lang: Option<String>,
 }
 
 pub struct App {
@@ -128,13 +123,6 @@ pub enum PlaybackState {
      
      // Initialize i18n
      i18n::init();
-     
-     // Command line language option overrides environment
-     if let Some(lang) = cli.lang {
-         if !lang.is_empty() {
-             i18n::set_locale(&[&lang.to_string()]);
-         }
-     }
 
      // Handle broadcast mode
      if let Some(message) = cli.broadcast {
@@ -447,8 +435,6 @@ pub enum PlaybackState {
          Span::raw(format!(":{} ", t("controls-volume"))),
          Span::styled("?", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
          Span::raw(format!(":{} ", t("controls-help"))),
-         Span::styled("l", Style::default().fg(Color::White).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(format!(":Lang ({})", i18n::get_current_locale_code())),
      ]);
 
 
@@ -737,10 +723,6 @@ pub enum PlaybackState {
                  Span::styled("?", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
                  Span::raw(format!(" - {}", t("help-toggle-help")))
              ]),
-             Line::from(vec![
-                 Span::styled("l", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Toggle language (en/ru)")
-             ]),
              Line::from(""),
              Line::from(t("help-cli")),
              Line::from(""),
@@ -771,10 +753,6 @@ pub enum PlaybackState {
              Line::from(vec![
                  Span::styled("--broadcast <MSG>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
                  Span::raw(format!(" - {}", t("help-broadcast")))
-             ]),
-             Line::from(vec![
-                 Span::styled("--lang <CODE>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(" - Set language (en, ru)")
              ]),
              Line::from(""),
              Line::from(t("help-close")),
@@ -830,8 +808,6 @@ async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCom
             ["select", "up"] => ControlCommand::SelectUp,
             ["select", "down"] => ControlCommand::SelectDown,
             ["toggle"] => ControlCommand::Toggle,
-            ["language"] => ControlCommand::ToggleLanguage,
-            ["lang"] => ControlCommand::ToggleLanguage,
             _ => continue,
         };
         

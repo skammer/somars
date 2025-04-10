@@ -62,23 +62,6 @@ pub fn handle_key_event(
             handle_history_scroll_up(app);
             true
         },
-        KeyCode::Char('l') => {
-            // Toggle language
-            let current = i18n::get_current_locale_code();
-            if current == "en" {
-                i18n::set_locale(&["ru"]);
-            } else {
-                i18n::set_locale(&["en"]);
-            }
-            
-            // Log the language change
-            let _ = log_tx.send(HistoryMessage {
-                message: format!("Language changed to: {}", i18n::get_current_locale_code()),
-                message_type: MessageType::System,
-                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-            });
-            true
-        },
         _ => false
     }
 }
