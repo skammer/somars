@@ -133,6 +133,9 @@ pub enum PlaybackState {
      if !cli.lang.is_empty() {
          i18n::set_locale(&[&cli.lang]);
      }
+     
+     // Print the current locale for debugging
+     eprintln!("Current locale: {}", i18n::get_current_locale_code());
 
      // Handle broadcast mode
      if let Some(message) = cli.broadcast {

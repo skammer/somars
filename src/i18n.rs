@@ -22,29 +22,35 @@ thread_local! {
 
 // Current locale - initialized from environment or defaults to "en"
 static CURRENT_LOCALE: Lazy<RwLock<String>> = Lazy::new(|| {
-    // Try to get locale from LANG environment variable
-    if let Ok(lang) = std::env::var("LANG") {
-        // Parse the locale string (e.g., "en_US.UTF-8" -> "en")
-        if let Some(lang_code) = lang.split('_').next() {
+    // Try to get locale from various environment variables
+    let env_vars = ["LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"];
+    
+    for var in env_vars {
+        if let Ok(lang) = std::env::var(var) {
+            // Parse the locale string (e.g., "en_US.UTF-8" -> "en")
+            let lang_code = lang.split(['_', '.', '@']).next().unwrap_or("").to_lowercase();
+            
             // Check if it's a supported locale
             if lang_code == "ru" || lang_code == "en" {
-                return RwLock::new(lang_code.to_string());
-            } else {
-                // Default to English if not found or not supported
-                return RwLock::new("en".to_string());
+                return RwLock::new(lang_code);
             }
-        } else {
-            // Default to English if not found or not supported
-            return RwLock::new("en".to_string());
         }
-    } else {
-        // Default to English if not found or not supported
-        return RwLock::new("en".to_string())
     }
+    
+    // Default to English if not found or not supported
+    RwLock::new("en".to_string())
 });
 
 // Initialize i18n system
 pub fn init() {
+    // Print environment variables for debugging
+    if let Ok(lang) = std::env::var("LANG") {
+        eprintln!("DEBUG: LANG env var = {}", lang);
+    }
+    if let Ok(lc_all) = std::env::var("LC_ALL") {
+        eprintln!("DEBUG: LC_ALL env var = {}", lc_all);
+    }
+    
     BUNDLES.with(|bundles| {
         let mut bundles = bundles.borrow_mut();
         
@@ -79,13 +85,16 @@ pub fn init() {
 pub fn set_locale(requested: &[&str]) {
     // Simplified approach - just use the first requested locale if supported
     if let Some(locale) = requested.first() {
-        let locale_str = locale.to_string();
+        let locale_str = locale.to_string().to_lowercase();
         if locale_str == "en" || locale_str == "ru" {
             let mut current = CURRENT_LOCALE.write().unwrap();
             *current = locale_str;
             
             // Make sure the bundles are initialized for this thread
             init();
+            
+            // Debug output
+            eprintln!("DEBUG: Locale set to: {}", locale_str);
         }
     }
 }
