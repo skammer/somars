@@ -1,7 +1,7 @@
 use fluent::{FluentBundle, FluentResource};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::sync::{Mutex, RwLock};
+use std::sync::RwLock;
 use unic_langid::{langid, LanguageIdentifier};
 use std::cell::RefCell;
 use std::thread_local;
@@ -88,7 +88,7 @@ pub fn set_locale(requested: &[&str]) {
         let locale_str = locale.to_string().to_lowercase();
         if locale_str == "en" || locale_str == "ru" {
             let mut current = CURRENT_LOCALE.write().unwrap();
-            *current = locale_str;
+            *current = locale_str.clone();
             
             // Make sure the bundles are initialized for this thread
             init();
