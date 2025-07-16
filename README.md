@@ -15,7 +15,7 @@ A Rust implementation of a SomaFM internet radio player with TUI interface and U
 ## Installation
 
 ```bash
-cargo install --path .
+cargo install somars
 ```
 
 **Note:** Requires `pkg-config` and `libasound2-dev` (Linux) for audio support:
