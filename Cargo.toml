@@ -5,7 +5,12 @@ edition = "2021"
 authors = ["Max Vasiliev <max@vasiliev.me>"]
 description = "A rusty soma.fm player"
 license = "MIT"
-# repository = "https://github.com/yourusername/somars"  # Optional
+homepage = "https://github.com/skammer/somars"
+repository = "https://github.com/skammer/somars"
+readme = "README.md"
+keywords = ["player", "tui", "somafm"]
+categories = ["command-line-utilities"]
+
 
 [dependencies]
 anyhow = "1.0"
