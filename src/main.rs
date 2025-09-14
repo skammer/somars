@@ -1,5 +1,4 @@
 use clap::Parser;
-use ratatui::style::Stylize;
 
 use crossterm::{
     event::{self, Event},
@@ -8,35 +7,18 @@ use crossterm::{
         LeaveAlternateScreen},
 };
 
-use ratatui::text::{Line, Span, Text};
-
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Flex, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph, ListState, ListDirection},
+    widgets::ListState,
     Terminal,
 };
+
 use std::{
     io,
     sync::{Arc, Mutex},
     time::{Duration, Instant}
 };
 
-#[derive(Debug)]
-enum ControlCommand {
-    Play,
-    Stop,
-    VolumeUp,
-    VolumeDown,
-    SetVolume(f32),
-    Tune(String),
-    TuneNext,
-    TunePrev,
-    SelectUp,
-    SelectDown,
-    Toggle,
-}
 use rodio::{OutputStream, Sink};
 
 mod station;
@@ -45,6 +27,12 @@ use crate::station::Station;
 mod mp3_stream_decoder;
 mod keyboard;
 mod i18n;
+mod error;
+mod control;
+mod config;
+mod ui;
+mod utils;
+use control::ControlCommand;
 use i18n::t;
 
 
@@ -118,8 +106,11 @@ pub enum PlaybackState {
 }
 
  #[tokio::main]
- async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+ async fn main() -> Result<(), error::AppError> {
      let cli = Cli::parse();
+     
+     // Load configuration
+     let config = config::Config::load().unwrap_or_default();
      
      // Initialize i18n
      i18n::init();
@@ -129,7 +120,7 @@ pub enum PlaybackState {
          send_udp_broadcast(&message, cli.port).await?;
          return Ok(());
      }
-     use ratatui::widgets::ListState;
+     
      // Setup terminal
      enable_raw_mode()?;
      let mut stdout = io::stdout();
@@ -144,16 +135,22 @@ pub enum PlaybackState {
 
      // Create app state
      let (_stream, stream_handle) = OutputStream::try_default().map_err(|e| {
-         anyhow::anyhow!("Failed to initialize audio: {}. Check your system's audio devices.", e)
+         error::AppError::Audio(format!("Failed to initialize audio output stream: {}. This could be due to:\n\
+                                         - No audio output device available\n\
+                                         - Audio device is busy or locked by another application\n\
+                                         - Missing audio system dependencies (e.g., ALSA on Linux)\n\
+                                         Try checking your system's audio settings or restarting your audio service.", e))
      })?;
 
      let sink = match Sink::try_new(&stream_handle) {
          Ok(s) => s,
          Err(e) => {
-             return Err(anyhow::anyhow!(
-                 "Failed to create audio sink: {}. Make sure another application isn't blocking audio access.",
-                 e
-             ).into());
+             return Err(error::AppError::Audio(format!(
+                 "Failed to create audio sink: {}. This could be due to:\n\
+                 - Audio device is busy or locked by another application\n\
+                 - Missing required audio codecs\n\
+                 Try closing other audio applications or checking your audio setup.", e
+             )));
          }
      };
 
@@ -162,8 +159,10 @@ pub enum PlaybackState {
      let (command_tx, mut command_rx) = tokio::sync::mpsc::channel(32);
 
      // Start UDP listener if enabled
-     if cli.listen {
-         let port = cli.port;
+     let udp_enabled = cli.listen || config.udp_enabled;
+     let udp_port = cli.port.max(config.udp_port); // Use CLI port if specified, otherwise config port
+     if udp_enabled {
+         let port = udp_port;
          let command_tx = command_tx.clone();
          let log_tx = log_tx.clone();
          
@@ -201,19 +200,19 @@ pub enum PlaybackState {
          sink: Some(Arc::new(Mutex::new(sink))),
          loading: true,
          spinner_state: 0,
-         volume: 1.0,
+         volume: config.volume,
          spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
          playback_frames: vec!["▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮"],
          playback_frame_index: 0,
          show_help: false,
-         log_level: cli.log_level,
+         log_level: cli.log_level.max(config.log_level), // Use CLI flag if higher than config
          playback_start_time: None,
          total_played: std::time::Duration::default(),
          last_pause_time: None,
      };
      
      // Store the station ID to auto-play
-     let auto_play_station_id = cli.station.clone();
+     let auto_play_station_id = cli.station.clone().or(config.last_station);
 
      // Spawn station fetching task
      let (tx, mut rx) = tokio::sync::mpsc::channel(1);
@@ -228,7 +227,7 @@ pub enum PlaybackState {
      let tick_rate = Duration::from_millis(250);
      let mut last_tick = Instant::now();
      loop {
-         terminal.draw(|f| ui(f, &mut app))?;
+         terminal.draw(|f| ui::ui(f, &mut app))?;
 
          let timeout = tick_rate
              .checked_sub(last_tick.elapsed())
@@ -288,63 +287,7 @@ pub enum PlaybackState {
 
          // Process control commands
          while let Ok(cmd) = command_rx.try_recv() {
-             match cmd {
-                 ControlCommand::Play => keyboard::handle_play(&mut app, &log_tx),
-                 ControlCommand::Stop => keyboard::handle_stop(&mut app),
-                 ControlCommand::VolumeUp => keyboard::handle_volume_up(&mut app),
-                 ControlCommand::VolumeDown => keyboard::handle_volume_down(&mut app),
-                 ControlCommand::SetVolume(level) => {
-                     app.volume = level.clamp(0.0, 2.0);
-                     if let Some(sink) = &app.sink {
-                         if let Ok(sink) = sink.lock() {
-                             sink.set_volume(app.volume);
-                         }
-                     }
-                 }
-                 ControlCommand::Tune(station_id) => {
-                     if let Some(index) = app.stations.iter().position(|s| s.id == station_id) {
-                         app.selected_station.select(Some(index));
-                         keyboard::handle_play(&mut app, &log_tx);
-                     }
-                 }
-                 ControlCommand::TuneNext => {
-                     if !app.stations.is_empty() {
-                         let current = app.selected_station.selected().unwrap_or(0);
-                         let new_index = if current == app.stations.len() - 1 {
-                             0
-                         } else {
-                             current + 1
-                         };
-                         app.selected_station.select(Some(new_index));
-                         keyboard::handle_play(&mut app, &log_tx);
-                     }
-                 }
-                 ControlCommand::TunePrev => {
-                     if !app.stations.is_empty() {
-                         let current = app.selected_station.selected().unwrap_or(0);
-                         let new_index = if current == 0 {
-                             app.stations.len() - 1
-                         } else {
-                             current - 1
-                         };
-                         app.selected_station.select(Some(new_index));
-                         keyboard::handle_play(&mut app, &log_tx);
-                     }
-                 }
-                 ControlCommand::SelectUp => {
-                     keyboard::handle_up(&mut app);
-                 }
-                 ControlCommand::SelectDown => {
-                     keyboard::handle_down(&mut app);
-                 }
-                 ControlCommand::Toggle => {
-                     if matches!(app.playback_state, PlaybackState::Stopped) {
-                         keyboard::handle_play(&mut app, &log_tx);
-                     } else {
-                         keyboard::handle_stop(&mut app);
-                     }
-                 }
-             }
+             keyboard::execute_command(cmd, &mut app, &log_tx);
          }
 
          if last_tick.elapsed() >= tick_rate {
@@ -365,6 +308,24 @@ pub enum PlaybackState {
          }
 
          if app.should_quit {
+             // Save configuration before quitting
+             let mut config = config::Config::load().unwrap_or_default();
+             config.volume = app.volume;
+             config.log_level = app.log_level;
+             config.udp_port = udp_port;
+             config.udp_enabled = udp_enabled;
+             
+             // Save the last played station
+             if let Some(index) = app.active_station {
+                 if let Some(station) = app.stations.get(index) {
+                     config.last_station = Some(station.id.clone());
+                 }
+             }
+             
+             if let Err(e) = config.save() {
+                 eprintln!("Failed to save config: {}", e);
+             }
+             
              break;
          }
      }
@@ -385,425 +346,68 @@ pub enum PlaybackState {
      Ok(())
  }
 
- fn format_duration(d: std::time::Duration) -> String {
-     let secs = d.as_secs();
-     let hours = secs / 3600;
-     let minutes = (secs % 3600) / 60;
-     let seconds = secs % 60;
-     format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
- }
-
- fn ui(f: &mut ratatui::Frame, app: &mut App) {
-
-     // app layout - ui and controls
-     let app_layout = Layout::default()
-         .direction(Direction::Vertical)
-         .constraints(
-             [
-             Constraint::Fill(1), // History
-             Constraint::Length(1), // Bottom controls
-             ]
-             .as_ref(),
-         )
-         .split(f.area());
-
-     // Bottom controls bar
-     let bottom_controls = Line::from(vec![
-         Span::styled("q", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(format!(":{} ", t("controls-quit"))),
-         Span::styled("↵", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(format!(":{} ", t("controls-play"))),
-         Span::styled("Space", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(format!(":{}/{} ", t("controls-stop"), t("controls-start"))),
-         Span::styled("+/-", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(format!(":{} ", t("controls-volume"))),
-         Span::styled("?", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
-         Span::raw(format!(":{} ", t("controls-help"))),
-     ]);
-
-
-     let _bottom_controls_alt = Paragraph::new(vec![
-         Line::from(vec![
-             Span::styled("Play [↵]", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(" "),
-             Span::styled("Pause [space]", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(" "),
-             Span::styled("Stop [s]", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(" "),
-             Span::styled("Quit [q]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(" "),
-             Span::styled("Volume [+/-]", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::REVERSED)),
-             Span::raw(format!(" ({:.1})", if app.volume.abs() < 0.05 { 0.0 } else { app.volume })),
-         ]),
-         Line::from(vec![
-             Span::raw("Status: "),
-             Span::styled(
-                 match app.playback_state {
-                     PlaybackState::Playing => "Playing",
-                     PlaybackState::Paused => "Paused",
-                     PlaybackState::Stopped => "Stopped",
-                 },
-                 match app.playback_state {
-                     PlaybackState::Playing => Style::default().fg(Color::Green),
-                     PlaybackState::Paused => Style::default().fg(Color::Blue),
-                     PlaybackState::Stopped => Style::default().fg(Color::Red),
-                 },
-             ),
-         ]),
-     ]);
-
-
-     let bottom_bar = Paragraph::new(bottom_controls)
-         .alignment(ratatui::layout::Alignment::Left);
-
-     // TODO: decide which option looks better
-     f.render_widget(bottom_bar, app_layout[1]);
-     // f.render_widget(bottom_controls_alt, app_layout[1]);
-
-
-     let chunks = Layout::default()
-         .direction(Direction::Horizontal)
-         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-         .split(app_layout[0]);
-
-     // Left panel - Station list or loading indicator
-     if app.loading {
-         let loading_text = vec![
-             Line::from(vec![
-                 Span::raw(app.spinner_frames[app.spinner_state]),
-                 Span::raw(format!(" {}", t("loading-stations"))),
-             ]),
-         ];
-         let loading_para = Paragraph::new(loading_text)
-             .block(Block::default().borders(Borders::ALL).title(t("loading")))
-             .alignment(ratatui::layout::Alignment::Center);
-         f.render_widget(loading_para, chunks[0]);
-     } else {
-         let station_items: Vec<ListItem> = app
-             .stations
-             .iter()
-             .enumerate()
-             .map(|(i, s)| {
-                 let style = if Some(i) == app.active_station {
-                     Style::default().add_modifier(ratatui::style::Modifier::UNDERLINED)
-                 } else {
-                     Style::default()
-                 };
-                 ListItem::new(Span::styled(s.title.as_str(), style))
-             })
-             .collect();
-
-         let selected_pos = app.selected_station.selected().unwrap_or(0) + 1;
-         let total_stations = app.stations.len();
-         let stations_list = List::new(station_items)
-             .block(
-                 Block::bordered()
-                     .title(Line::from(t("stations")))
-                     .title(Line::from("[↓↑]").right_aligned())
-                     .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)).right_aligned())
-             )
-             // .highlight_style(Style::default())
-             // .highlight_symbol(">>")
-             .repeat_highlight_symbol(true)
-             .highlight_style(Style::default().bg(Color::Blue))
-         ;
-
-
-         f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
-     }
-
-     // Right panel - Playback controls and info
-     let right_chunks = Layout::default()
-         .direction(Direction::Vertical)
-         .constraints([
-             Constraint::Length(10), // Now Playing
-             Constraint::Fill(1), // History
-         ]
-         .as_ref(),
-         )
-         .split(chunks[1]);
-
-     // Now Playing
-     let now_playing = if let Some(index) = app.selected_station.selected() {
-         if let Some(station) = app.stations.get(index) {
-             Paragraph::new(vec![
-                 Line::from(vec![
-                     Span::styled(format!("{}: ", t("station-id")), Style::default().fg(Color::Yellow)),
-                     Span::raw(&station.id),
-                 ]),
-                 Line::from(vec![
-                     Span::styled(format!("{}: ", t("station-title")), Style::default().fg(Color::Yellow)),
-                     Span::raw(&station.title),
-                 ]),
-                 Line::from(vec![
-                     Span::styled(format!("{}: ", t("station-genre")), Style::default().fg(Color::Yellow)),
-                     Span::raw(&station.genre),
-                 ]),
-                 Line::from(vec![
-                     Span::styled(format!("{}: ", t("station-dj")), Style::default().fg(Color::Yellow)),
-                     Span::raw(&station.dj),
-                 ]),
-                 Line::from(""),
-                 Line::from(Span::raw(&station.description)),
-                 Line::from(""),
-                 Line::from(vec![
-                     Span::styled(format!("{}: ", t("playback-time")), Style::default().fg(Color::Yellow)),
-                     Span::raw({
-                         let total = match app.playback_state {
-                             PlaybackState::Playing => {
-                                 let base = app.total_played;
-                                 if let Some(start) = app.playback_start_time {
-                                     base + start.elapsed()
-                                 } else {
-                                     base
-                                 }
-                             }
-                             _ => app.total_played
-                         };
-                         format_duration(total)
-                     }),
-                 ]),
-             ])
-             .wrap(ratatui::widgets::Wrap { trim: true })
-         } else {
-             Paragraph::new(vec![Line::from(t("no-station-selected"))])
-         }
-     } else {
-         Paragraph::new(vec![Line::from(t("no-station-selected"))])
-     }
-     .block(Block::default().borders(Borders::ALL)
-         .title(Line::from(vec![
-                 Span::styled(format!(" ♪ {} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")), 
-                     Style::default().add_modifier(ratatui::style::Modifier::BOLD))
-         ]).right_aligned())
-         .title(
-             Line::from(vec![
-                 Span::raw("["),
-                 Span::styled(
-                     match app.playback_state {
-                         PlaybackState::Playing => t("playing"),
-                         PlaybackState::Paused => t("paused"),
-                         PlaybackState::Stopped => t("stopped"),
-                     },
-                     match app.playback_state {
-                         PlaybackState::Playing => Style::default().fg(Color::Green),
-                         PlaybackState::Paused => Style::default().fg(Color::Blue),
-                         PlaybackState::Stopped => Style::default().fg(Color::Red),
-                     },
-                 ),
-                 Span::raw("]"),
-
-                 if matches!(app.playback_state, PlaybackState::Playing) {
-                     Span::styled(format!(" {}", app.playback_frames[app.playback_frame_index]), Style::default().fg(Color::Green))
-                 } else {
-                     Span::raw("")
-                 },
-
-             ]),
-         )
-
-         .title_bottom(
-             Line::from(
-                 format!("[{}: {:.1}]", t("volume"), if app.volume.abs() < 0.05 { 0.0 } else { app.volume })
-                 ).centered()
-             )
-         );
-     f.render_widget(now_playing, right_chunks[0]);
-
-     // History
-     let history_items: Vec<ListItem> = app
-         .history
-         .iter()
-         .rev()
-         .filter(|msg| app.log_level > 1 || matches!(msg.message_type, MessageType::Error | MessageType::Info | MessageType::Playback))
-         .map(|msg| {
-             let width = right_chunks[1].width as usize;
-             let style = match msg.message_type {
-                 MessageType::Error => Style::default().fg(Color::Red),
-                 MessageType::Info => Style::default().fg(Color::White),
-                 MessageType::System => Style::default().fg(Color::Yellow),
-                 MessageType::Background => Style::default().fg(Color::DarkGray),
-                 MessageType::Playback => Style::default().fg(Color::Green),
-             };
-
-             // Format timestamp and message as separate columns
-             let timestamp_span = Span::styled(msg.timestamp.clone(), style);
-
-             // Wrap just the message part
-             let message_width = width.saturating_sub(10); // Timestamp width + separator
-             let wrapped_lines: Vec<String> = textwrap::wrap(&msg.message, message_width)
-                 .into_iter()
-                 .map(|s| s.to_string())
-                 .collect();
-
-             // Create lines with proper alignment
-             let mut lines = Vec::new();
-             if let Some(first_line) = wrapped_lines.first() {
-                 // First line has timestamp
-                 lines.push(Line::from(vec![
-                     timestamp_span.clone(),
-                     Span::styled("  ", style),
-                     Span::styled(first_line.clone(), style),
-                 ]));
-             }
-
-             // Additional lines are indented to align with first message line
-             for line in wrapped_lines.iter().skip(1) {
-                 lines.push(Line::from(vec![
-                     Span::styled("          ", style), // Timestamp width spaces
-                     Span::styled(line.clone(), style),
-                 ]));
-             }
-
-             let text = Text::from(lines);
-             ListItem::new(text)
-         })
-         .collect();
-
-     let selected_history_pos = app.history_scroll_state.selected().unwrap_or(0) + 1;
-     let total_history = app.history.iter()
-         .filter(|msg| app.log_level > 1 || matches!(msg.message_type, MessageType::Error | MessageType::Info | MessageType::Playback))
-         .count();
-     let history_list = List::new(history_items).direction(ListDirection::BottomToTop)
-         .block(Block::default()
-             .borders(Borders::ALL)
-             .title(t("history"))
-             .title(Line::from("[jk]").right_aligned())
-             .title_bottom(Line::from(format!("[{} / {}]", selected_history_pos, total_history)).right_aligned())
-         )
-         .highlight_style(Style::default().italic().add_modifier(ratatui::style::Modifier::UNDERLINED));
-     f.render_stateful_widget(history_list, right_chunks[1], &mut app.history_scroll_state);
-
-     if app.show_help {
-         let help_text = vec![
-             Line::from(vec![
-                 Span::styled(format!("{} - {}", env!("CARGO_PKG_NAME"), t("app-description")), 
-                     Style::default().add_modifier(ratatui::style::Modifier::BOLD))
-             ]),
-             Line::from(""),
-             Line::from(t("help-keyboard")),
-             Line::from(""),
-             Line::from(vec![
-                 Span::styled("↵ (Enter)", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-enter")))
-             ]),
-             Line::from(vec![
-                 Span::styled("Space", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-space")))
-             ]),
-             Line::from(vec![
-                 Span::styled("+/-", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-volume")))
-             ]),
-             Line::from(vec![
-                 Span::styled("↑/↓", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-arrows")))
-             ]),
-             Line::from(vec![
-                 Span::styled("q", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-quit")))
-             ]),
-             Line::from(vec![
-                 Span::styled("?", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-toggle-help")))
-             ]),
-             Line::from(""),
-             Line::from(t("help-cli")),
-             Line::from(""),
-             Line::from(vec![
-                 Span::styled("--log-level <1|2>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-log-level")))
-             ]),
-             Line::from(vec![
-                 Span::styled("--station <ID>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-station")))
-             ]),
-             Line::from(vec![
-                 Span::styled("--listen", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-listen")))
-             ]),
-             Line::from(vec![
-                 Span::styled("--port <NUM>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-port")))
-             ]),
-             Line::from(vec![
-                 Span::styled("--help", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-show-help")))
-             ]),
-             Line::from(vec![
-                 Span::styled("--version", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-version")))
-             ]),
-             Line::from(vec![
-                 Span::styled("--broadcast <MSG>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
-                 Span::raw(format!(" - {}", t("help-broadcast")))
-             ]),
-             Line::from(""),
-             Line::from(t("help-close")),
-         ];
-
-         let area = popup_area(f.area(), 60, 60);
-         let help_widget = Paragraph::new(help_text)
-             .block(Block::default()
-                 .title(t("help-title"))
-                 .title_bottom(Line::from(format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))).right_aligned())
-                 .borders(Borders::ALL)
-                 .border_type(ratatui::widgets::BorderType::Double))
-             .alignment(ratatui::layout::Alignment::Left)
-             .wrap(ratatui::widgets::Wrap { trim: true });
-
-         f.render_widget(ratatui::widgets::Clear, area);
-         f.render_widget(help_widget, area);
-     }
-
- }
-
-async fn send_udp_broadcast(message: &str, port: u16) -> io::Result<()> {
+async fn send_udp_broadcast(message: &str, port: u16) -> Result<(), error::AppError> {
     use tokio::net::UdpSocket;
     
-    let socket = UdpSocket::bind("0.0.0.0:0").await?;
-    socket.set_broadcast(true)?;
+    let socket = UdpSocket::bind("0.0.0.0:0").await
+        .map_err(|e| error::AppError::Udp(format!("Failed to bind UDP socket: {}", e)))?;
+    socket.set_broadcast(true)
+        .map_err(|e| error::AppError::Udp(format!("Failed to enable broadcast: {}", e)))?;
     let target_addr = format!("255.255.255.255:{}", port);
-    socket.send_to(message.as_bytes(), &target_addr).await?;
+    socket.send_to(message.as_bytes(), &target_addr).await
+        .map_err(|e| error::AppError::Udp(format!("Failed to send UDP packet to {}: {}", target_addr, e)))?;
     Ok(())
 }
 
-async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCommand>) -> io::Result<()> {
+async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCommand>) -> Result<(), error::AppError> {
     use tokio::net::UdpSocket;
     
-    let socket = UdpSocket::bind(("0.0.0.0", port)).await?;
+    let socket = UdpSocket::bind(("0.0.0.0", port)).await
+        .map_err(|e| error::AppError::Udp(format!("Failed to bind to port {}: {}", port, e)))?;
     let mut buf = [0; 1024];
 
     loop {
-        let (len, _) = socket.recv_from(&mut buf).await?;
+        let (len, addr) = socket.recv_from(&mut buf).await
+            .map_err(|e| error::AppError::Udp(format!("Failed to receive UDP packet: {}", e)))?;
         let msg = String::from_utf8_lossy(&buf[..len]).trim().to_lowercase();
+        
+        // Log received command
+        println!("Received UDP command from {}: {}", addr, msg);
         
         let cmd = match msg.split_whitespace().collect::<Vec<_>>().as_slice() {
             ["play"] => ControlCommand::Play,
             ["stop"] => ControlCommand::Stop,
             ["volume", "up"] => ControlCommand::VolumeUp,
             ["volume", "down"] => ControlCommand::VolumeDown,
-            ["volume", num] => num.parse().ok().map(ControlCommand::SetVolume).unwrap_or_else(|| {
-                ControlCommand::SetVolume(1.0)
-            }),
+            ["volume", num] => {
+                match num.parse::<f32>() {
+                    Ok(value) => {
+                        if value >= 0.0 && value <= 2.0 {
+                            ControlCommand::SetVolume(value)
+                        } else {
+                            eprintln!("Volume value out of range (0.0-2.0): {}", value);
+                            continue;
+                        }
+                    },
+                    Err(_) => {
+                        eprintln!("Invalid volume value: {}", num);
+                        continue;
+                    }
+                }
+            },
             ["tune", "next"] => ControlCommand::TuneNext,
             ["tune", "prev"] => ControlCommand::TunePrev,
             ["tune", id] => ControlCommand::Tune(id.to_string()),
             ["select", "up"] => ControlCommand::SelectUp,
             ["select", "down"] => ControlCommand::SelectDown,
             ["toggle"] => ControlCommand::Toggle,
-            _ => continue,
+            _ => {
+                eprintln!("Unknown UDP command: {}", msg);
+                continue;
+            },
         };
         
-        tx.send(cmd).await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        tx.send(cmd).await
+            .map_err(|e| error::AppError::Udp(format!("Failed to send command to app: {}", e)))?;
     }
-}
-
-/// helper function to create a centered rect using up certain percentage of the available rect `r`
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
-    let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
-    let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
-    let [area] = vertical.areas(area);
-    let [area] = horizontal.areas(area);
-    area
 }

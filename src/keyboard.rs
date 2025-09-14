@@ -1,67 +1,137 @@
-use crate::{App, MessageType, PlaybackState, HistoryMessage, t};
+use crate::{App, MessageType, PlaybackState, HistoryMessage, t, control::ControlCommand};
 use crossterm::event::KeyCode;
 use stream_download::http::reqwest::Client as StreamClient;
 use icy_metadata::RequestIcyMetadata;
 use tokio::sync::mpsc::Sender;
 use std::time::Instant;
 
+/// Parse a key event and return the corresponding command if applicable
+pub fn parse_key_event(key: KeyCode) -> Option<ControlCommand> {
+    match key {
+        KeyCode::Char('q') => Some(ControlCommand::Quit),
+        KeyCode::Enter => Some(ControlCommand::Play),
+        KeyCode::Char(' ') => Some(ControlCommand::TogglePause),
+        KeyCode::Up => Some(ControlCommand::SelectUp),
+        KeyCode::Down => Some(ControlCommand::SelectDown),
+        KeyCode::Char('+') | KeyCode::Char('=') => Some(ControlCommand::VolumeUp),
+        KeyCode::Char('-') => Some(ControlCommand::VolumeDown),
+        KeyCode::Char('?') => Some(ControlCommand::ToggleHelp),
+        KeyCode::Char('k') => Some(ControlCommand::ScrollHistoryUp),
+        KeyCode::Char('j') => Some(ControlCommand::ScrollHistoryDown),
+        _ => None
+    }
+}
+
+/// Handle a key event by parsing it and executing the corresponding command
 pub fn handle_key_event(
     key: KeyCode, 
     app: &mut App, 
     log_tx: &Sender<HistoryMessage>,
     _last_tick: &mut Instant
 ) -> bool {
-    match key {
-        KeyCode::Char('q') => {
+    if let Some(command) = parse_key_event(key) {
+        execute_command(command, app, log_tx);
+        true
+    } else {
+        false
+    }
+}
+
+/// Execute a control command
+pub fn execute_command(
+    command: ControlCommand,
+    app: &mut App,
+    log_tx: &Sender<HistoryMessage>
+) {
+    match command {
+        ControlCommand::Quit => {
             app.should_quit = true;
-            true
         },
-        KeyCode::Enter => {
+        ControlCommand::Play => {
             handle_play(app, log_tx);
-            true
         },
-        KeyCode::Char(' ') => {
+        ControlCommand::Stop => {
+            handle_stop(app);
+        },
+        ControlCommand::TogglePause => {
             match app.playback_state {
                 PlaybackState::Playing => {
-                    handle_stop(app);
+                    handle_pause(app);
                 }
                 PlaybackState::Stopped => {
-                    handle_play(app, log_tx);
+                    // Do nothing, let handle_play be called explicitly
                 }
-                PlaybackState::Paused => {}
+                PlaybackState::Paused => {
+                    handle_resume(app, log_tx);
+                }
             }
-
-            true
         },
-        KeyCode::Up => {
-            handle_up(app);
-            true
-        },
-        KeyCode::Down => {
-            handle_down(app);
-            true
-        },
-        KeyCode::Char('+') | KeyCode::Char('=') => {
+        ControlCommand::VolumeUp => {
             handle_volume_up(app);
-            true
         },
-        KeyCode::Char('-') => {
+        ControlCommand::VolumeDown => {
             handle_volume_down(app);
-            true
         },
-        KeyCode::Char('?') => {
+        ControlCommand::SetVolume(level) => {
+            app.volume = level.clamp(0.0, 2.0);
+            if let Some(sink) = &app.sink {
+                if let Ok(sink) = sink.lock() {
+                    sink.set_volume(app.volume);
+                }
+            }
+        },
+        ControlCommand::Tune(station_id) => {
+            if let Some(index) = app.stations.iter().position(|s| s.id == station_id) {
+                app.selected_station.select(Some(index));
+                handle_play(app, log_tx);
+            }
+        },
+        ControlCommand::TuneNext => {
+            if !app.stations.is_empty() {
+                let current = app.selected_station.selected().unwrap_or(0);
+                let new_index = if current == app.stations.len() - 1 {
+                    0
+                } else {
+                    current + 1
+                };
+                app.selected_station.select(Some(new_index));
+                handle_play(app, log_tx);
+            }
+        },
+        ControlCommand::TunePrev => {
+            if !app.stations.is_empty() {
+                let current = app.selected_station.selected().unwrap_or(0);
+                let new_index = if current == 0 {
+                    app.stations.len() - 1
+                } else {
+                    current - 1
+                };
+                app.selected_station.select(Some(new_index));
+                handle_play(app, log_tx);
+            }
+        },
+        ControlCommand::SelectUp => {
+            handle_up(app);
+        },
+        ControlCommand::SelectDown => {
+            handle_down(app);
+        },
+        ControlCommand::Toggle => {
+            if matches!(app.playback_state, PlaybackState::Stopped) {
+                handle_play(app, log_tx);
+            } else {
+                handle_stop(app);
+            }
+        },
+        ControlCommand::ToggleHelp => {
             app.show_help = !app.show_help;
-            true
         },
-        KeyCode::Char('k') => {
-            handle_history_scroll_down(app);
-            true
-        },
-        KeyCode::Char('j') => {
+        ControlCommand::ScrollHistoryUp => {
             handle_history_scroll_up(app);
-            true
         },
-        _ => false
+        ControlCommand::ScrollHistoryDown => {
+            handle_history_scroll_down(app);
+        },
     }
 }
 
@@ -230,24 +300,72 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
 pub fn handle_stop(app: &mut App) {
     if let Some(sink) = &app.sink {
         if let Ok(sink) = sink.lock() {
-            // Keep total_played duration but reset timing state
-            // app.playback_start_time = None;
-            // app.last_pause_time = None;
-            //
-
             match app.playback_state {
                 PlaybackState::Playing => {
                     sink.stop();
                     sink.empty();
                     app.playback_state = PlaybackState::Stopped;
+                    // Add elapsed time to total played time
                     if let Some(start) = app.playback_start_time.take() {
                         app.total_played += start.elapsed();
                     }
-                    app.last_pause_time = Some(std::time::Instant::now());
+                    app.last_pause_time = None; // Clear pause time when fully stopping
+                }
+                PlaybackState::Paused => {
+                    sink.stop();
+                    sink.empty();
+                    app.playback_state = PlaybackState::Stopped;
+                    // When paused, time is already added to total_played
+                    app.last_pause_time = None; // Clear pause time when fully stopping
                 }
                 PlaybackState::Stopped => {}
-                PlaybackState::Paused => {}
             }
+        }
+    }
+}
+
+pub fn handle_pause(app: &mut App) {
+    if let Some(sink) = &app.sink {
+        if let Ok(sink) = sink.lock() {
+            match app.playback_state {
+                PlaybackState::Playing => {
+                    sink.pause();
+                    app.playback_state = PlaybackState::Paused;
+                    // Add elapsed time to total played time
+                    if let Some(start) = app.playback_start_time.take() {
+                        app.total_played += start.elapsed();
+                    }
+                    // Store pause time for potential resume
+                    app.last_pause_time = Some(std::time::Instant::now());
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+pub fn handle_resume(app: &mut App, log_tx: &Sender<HistoryMessage>) {
+    // First, check if we need to fallback to handle_play
+    let needs_fallback = match app.playback_state {
+        PlaybackState::Paused => false,
+        _ => true,
+    };
+    
+    if needs_fallback {
+        // If not paused, just start playing (fallback)
+        handle_play(app, log_tx);
+        return;
+    }
+    
+    // We're in the paused state, so handle resuming
+    if let Some(sink) = &app.sink {
+        if let Ok(sink) = sink.lock() {
+            sink.play();
+            app.playback_state = PlaybackState::Playing;
+            // Reset start time for new playing session
+            app.playback_start_time = Some(std::time::Instant::now());
+            // Clear pause time as we're now playing
+            app.last_pause_time = None;
         }
     }
 }
@@ -276,23 +394,19 @@ pub fn handle_down(app: &mut App) {
 }
 
 pub fn handle_volume_up(app: &mut App) {
-    if app.volume < 2.0 {
-        app.volume += 0.1;
-        if let Some(sink) = &app.sink {
-            if let Ok(sink) = sink.lock() {
-                sink.set_volume(app.volume);
-            }
+    app.volume = (app.volume + 0.05).min(2.0); // 5% increments, max 200%
+    if let Some(sink) = &app.sink {
+        if let Ok(sink) = sink.lock() {
+            sink.set_volume(app.volume);
         }
     }
 }
 
 pub fn handle_volume_down(app: &mut App) {
-    if app.volume > 0.0 {
-        app.volume -= 0.1;
-        if let Some(sink) = &app.sink {
-            if let Ok(sink) = sink.lock() {
-                sink.set_volume(app.volume);
-            }
+    app.volume = (app.volume - 0.05).max(0.0); // 5% decrements, min 0%
+    if let Some(sink) = &app.sink {
+        if let Ok(sink) = sink.lock() {
+            sink.set_volume(app.volume);
         }
     }
 }

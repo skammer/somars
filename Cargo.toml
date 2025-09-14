@@ -38,6 +38,9 @@ fluent-bundle = "0.15.2"
 fluent-langneg = "0.13.0"
 unic-langid = { version = "0.9.1", features = ["macros"] }
 once_cell = "1.18.0"
+thiserror = "1.0"
+toml = "0.8"
+dirs = "5.0"
 
 # https://github.com/johnthagen/min-sized-rust
 [profile.release]

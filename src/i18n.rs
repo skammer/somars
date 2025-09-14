@@ -73,22 +73,6 @@ pub fn init() {
     });
 }
 
-// Set current locale based on requested languages
-pub fn set_locale(requested: &[&str]) {
-    // Simplified approach - just use the first requested locale if supported
-    if let Some(locale) = requested.first() {
-        let locale_str = locale.to_string().to_lowercase();
-        if locale_str == "en" || locale_str == "ru" {
-            let mut current = CURRENT_LOCALE.write().unwrap();
-            *current = locale_str.clone();
-            
-            // Make sure the bundles are initialized for this thread
-            init();
-            
-        }
-    }
-}
-
 // Get translation for a key
 pub fn get_message(key: &str) -> String {
     let current_locale = CURRENT_LOCALE.read().unwrap().clone();
@@ -112,11 +96,6 @@ pub fn get_message(key: &str) -> String {
     
     // Return the result or fallback to key if translation not found
     result.unwrap_or_else(|| key.to_string())
-}
-
-// Get current locale code (e.g., "en", "ru")
-pub fn get_current_locale_code() -> String {
-    CURRENT_LOCALE.read().unwrap().clone()
 }
 
 // Shorthand function for translation

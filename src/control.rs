@@ -1,0 +1,19 @@
+#[derive(Debug)]
+pub enum ControlCommand {
+    Play,
+    Stop,
+    VolumeUp,
+    VolumeDown,
+    SetVolume(f32),
+    Tune(String),
+    TuneNext,
+    TunePrev,
+    SelectUp,
+    SelectDown,
+    Toggle,
+    TogglePause,
+    ToggleHelp,
+    ScrollHistoryUp,
+    ScrollHistoryDown,
+    Quit,
+}
