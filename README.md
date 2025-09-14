@@ -38,6 +38,7 @@ somars [OPTIONS]
 - `--listen` - Enable UDP control listener
 - `--port <NUM>` - Set UDP port for both listening and broadcasting [default: 8069]
 - `--broadcast <MSG>` - Send UDP command to network and exit
+- `--locale <LOCALE>` - Set the locale (en, ru) [default: system locale]
 
 ## UDP Command Interface
 

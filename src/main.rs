@@ -74,6 +74,10 @@ struct Cli {
     /// Broadcast a UDP command to the network and exit
     #[arg(short = 'b', long)]
     broadcast: Option<String>,
+
+    /// Set the locale (en, ru)
+    #[arg(short = 'L', long)]
+    locale: Option<String>,
 }
 
 pub struct App {
@@ -113,7 +117,7 @@ pub enum PlaybackState {
      let config = config::Config::load().unwrap_or_default();
      
      // Initialize i18n
-     i18n::init();
+     i18n::init(cli.locale.clone());
 
      // Handle broadcast mode
      if let Some(message) = cli.broadcast {

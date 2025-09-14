@@ -63,4 +63,5 @@ help-port = Set UDP port (default: 8069)
 help-show-help = Show command line help
 help-version = Show version information
 help-broadcast = Send UDP command to network and exit
+help-locale = Set the locale (en, ru)
 help-close = Press ? to close this help screen

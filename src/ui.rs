@@ -350,6 +350,10 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 Span::styled("--broadcast <MSG>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
                 Span::raw(format!(" - {}", t("help-broadcast")))
             ]),
+            Line::from(vec![
+                Span::styled("--locale <LOCALE>", Style::default().add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::raw(format!(" - {}", t("help-locale")))
+            ]),
             Line::from(""),
             Line::from(t("help-close")),
         ];
