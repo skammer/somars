@@ -16,8 +16,8 @@ pub fn parse_key_event(key: KeyCode) -> Option<ControlCommand> {
         KeyCode::Char('+') | KeyCode::Char('=') => Some(ControlCommand::VolumeUp),
         KeyCode::Char('-') => Some(ControlCommand::VolumeDown),
         KeyCode::Char('?') => Some(ControlCommand::ToggleHelp),
-        KeyCode::Char('k') => Some(ControlCommand::ScrollHistoryUp),
-        KeyCode::Char('j') => Some(ControlCommand::ScrollHistoryDown),
+        KeyCode::Char('j') => Some(ControlCommand::ScrollHistoryUp),
+        KeyCode::Char('k') => Some(ControlCommand::ScrollHistoryDown),
         _ => None
     }
 }
