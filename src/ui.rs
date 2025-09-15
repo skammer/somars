@@ -87,7 +87,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
             ]),
         ];
         let loading_para = Paragraph::new(loading_text)
-            .block(Block::default().borders(Borders::ALL).title(t("loading")))
+            .block(Block::default().borders(Borders::ALL).title(t("loading")).padding(ratatui::widgets::Padding::new(1, 1, 0, 0)))
             .alignment(ratatui::layout::Alignment::Center);
         f.render_widget(loading_para, chunks[0]);
     } else {
@@ -113,6 +113,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                     .title(Line::from(t("stations")))
                     .title(Line::from("[↓↑]").right_aligned())
                     .title_bottom(Line::from(format!("[{} / {}]", selected_pos, total_stations)).right_aligned())
+                    .padding(ratatui::widgets::Padding::new(1, 1, 0, 0))
             )
             // .highlight_style(Style::default())
             // .highlight_symbol(">>")
@@ -219,7 +220,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 format!("[{}: {:.0}%]", t("volume"), app.volume * 100.0)
                 ).centered()
             )
-        );
+        .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)));
     f.render_widget(now_playing, right_chunks[0]);
 
     // History
@@ -282,6 +283,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
             .title(t("history"))
             .title(Line::from("[jk]").right_aligned())
             .title_bottom(Line::from(format!("[{} / {}]", selected_history_pos, total_history)).right_aligned())
+            .padding(ratatui::widgets::Padding::new(1, 1, 0, 0))
         )
         .highlight_style(Style::default().add_modifier(ratatui::style::Modifier::ITALIC).add_modifier(ratatui::style::Modifier::UNDERLINED));
     f.render_stateful_widget(history_list, right_chunks[1], &mut app.history_scroll_state);
@@ -364,7 +366,8 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 .title(t("help-title"))
                 .title_bottom(Line::from(format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))).right_aligned())
                 .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Double))
+                .border_type(ratatui::widgets::BorderType::Double)
+                .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)))
             .alignment(ratatui::layout::Alignment::Left)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
