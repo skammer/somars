@@ -221,7 +221,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                             let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::channel(32);
 
                             let decoder = tokio::task::spawn_blocking(move || {
-                                rodio::Decoder::new_mp3(icy_metadata::IcyMetadataReader::new(
+                                crate::mp3_stream_decoder::Mp3StreamDecoder::new(icy_metadata::IcyMetadataReader::new(
                                     reader,
                                     icy_headers.metadata_interval(),
                                     move |metadata| {
