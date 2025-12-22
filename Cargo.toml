@@ -15,32 +15,32 @@ categories = ["command-line-utilities"]
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.0", features = ["derive"] }
-crossterm = "0.27"
+crossterm = "0.29"
 futures = "0.3"
 futures-util = "0.3"
 ratatui = "0.29.0"
-reqwest = { version = "0.11", features = ["json", "stream"] }
-rodio = { version = "0.17", features = ["symphonia-all"] }
+reqwest = { version = "0.12.26", features = ["json", "stream"] }
+rodio = { version = "0.21", features = ["symphonia-all"] }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.138"
+serde_json = "1.0.146"
 tokio = { version = "1.0", features = ["full", "net"] }
 chrono = "0.4"
 textwrap = "0.16"
-stream-download = { version = "0.14.1", features = [
+stream-download = { version = "0.22.9", features = [
     "reqwest-native-tls",
     "async-read",
 ] }
 url = "2.5.4"
-minimp3 = "0.5.1"
-icy-metadata = { version = "0.2.1", features = ["serde", "reqwest"] }
-fluent = "0.16.0"
-fluent-bundle = "0.15.2"
-fluent-langneg = "0.13.0"
+minimp3 = "0.6.1"
+icy-metadata = { version = "0.5.1", features = ["serde", "reqwest"] }
+fluent = "0.17.0"
+fluent-bundle = "0.16.0"
+fluent-langneg = "0.14.2"
 unic-langid = { version = "0.9.1", features = ["macros"] }
 once_cell = "1.18.0"
-thiserror = "1.0"
-toml = "0.8"
-dirs = "5.0"
+thiserror = "2.0.17"
+toml = "0.9.10"
+dirs = "6.0"
 
 # https://github.com/johnthagen/min-sized-rust
 [profile.release]

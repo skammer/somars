@@ -138,25 +138,15 @@ pub enum PlaybackState {
      terminal.clear()?;
 
      // Create app state
-     let (_stream, stream_handle) = OutputStream::try_default().map_err(|e| {
-         error::AppError::Audio(format!("Failed to initialize audio output stream: {}. This could be due to:\n\
+     let (_stream, stream_handle) = OutputStream::try_default()
+         .map_err(|e| error::AppError::Audio(format!("Failed to initialize audio output stream: {}. This could be due to:\n\
                                          - No audio output device available\n\
                                          - Audio device is busy or locked by another application\n\
                                          - Missing audio system dependencies (e.g., ALSA on Linux)\n\
-                                         Try checking your system's audio settings or restarting your audio service.", e))
-     })?;
+                                         Try checking your system's audio settings or restarting your audio service.", e)))?;
 
-     let sink = match Sink::try_new(&stream_handle) {
-         Ok(s) => s,
-         Err(e) => {
-             return Err(error::AppError::Audio(format!(
-                 "Failed to create audio sink: {}. This could be due to:\n\
-                 - Audio device is busy or locked by another application\n\
-                 - Missing required audio codecs\n\
-                 Try closing other audio applications or checking your audio setup.", e
-             )));
-         }
-     };
+     let (sink, _stream_output) = Sink::new();
+     _stream_output.append(stream_handle);
 
      // Create channels for logging and control
      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);

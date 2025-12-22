@@ -48,8 +48,8 @@ where
     R: Read,
 {
     #[inline]
-    fn current_frame_len(&self) -> Option<usize> {
-        Some(self.current_frame.data.len())
+    fn current_span_len(&self) -> Option<usize> {
+        Some(self.current_frame.data.len() / (std::mem::size_of::<i16>() * self.channels() as usize))
     }
 
     #[inline]
@@ -72,11 +72,11 @@ impl<R> Iterator for Mp3StreamDecoder<R>
 where
     R: Read,
 {
-    type Item = i16;
+    type Item = f32;
 
     #[inline]
-    fn next(&mut self) -> Option<i16> {
-        if self.current_frame_offset == self.current_frame.data.len() {
+    fn next(&mut self) -> Option<f32> {
+        if self.current_frame_offset >= self.current_frame.data.len() {
             match self.decoder.next_frame() {
                 Ok(frame) => self.current_frame = frame,
                 _ => return None,
@@ -84,10 +84,24 @@ where
             self.current_frame_offset = 0;
         }
 
-        let v = self.current_frame.data[self.current_frame_offset];
-        self.current_frame_offset += 1;
+        // Read two bytes as i16
+        if self.current_frame_offset + 1 < self.current_frame.data.len() {
+            let low_byte = self.current_frame.data[self.current_frame_offset] as i16;
+            let high_byte = self.current_frame.data[self.current_frame_offset + 1] as i16;
+            self.current_frame_offset += 2;
 
-        Some(v)
+            let sample = if (low_byte & 0x80) != 0 {
+                // Negative number, extend sign
+                (high_byte << 8) | low_byte
+            } else {
+                (high_byte << 8) | low_byte
+            };
+
+            // Convert i16 to f32 in range [-1.0, 1.0]
+            Some(sample as f32 / i16::MAX as f32)
+        } else {
+            None
+        }
     }
 }
 
