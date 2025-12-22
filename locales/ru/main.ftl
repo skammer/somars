@@ -38,6 +38,7 @@ playback-error = Ошибка воспроизведения: {$error}
 starting-playback = Начинаем воспроизведение {$station}
 failed-playback = Не удалось начать воспроизведение
 failed-audio-sink = Не удалось получить доступ к аудиоустройству
+failed-decoder-construction = Не удалось создать аудио декодер: {$error}
 stream-from = Инициализация потока из: {$url}
 got-response = Получен ответ, запуск потока...
 bit-rate = Битрейт: {$rate}кбит/с

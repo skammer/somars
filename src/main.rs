@@ -19,12 +19,11 @@ use std::{
     time::{Duration, Instant}
 };
 
-use rodio::{OutputStream, Sink};
+use rodio::{OutputStreamBuilder, Sink};
 
 mod station;
 use crate::station::Station;
 
-mod mp3_stream_decoder;
 mod keyboard;
 mod i18n;
 mod error;
@@ -138,7 +137,7 @@ pub enum PlaybackState {
      terminal.clear()?;
 
      // Create app state
-     let (_stream, stream_handle) = OutputStream::try_default().map_err(|e| {
+     let stream_handle = OutputStreamBuilder::open_default_stream().map_err(|e| {
          error::AppError::Audio(format!("Failed to initialize audio output stream: {}. This could be due to:\n\
                                          - No audio output device available\n\
                                          - Audio device is busy or locked by another application\n\
@@ -146,17 +145,7 @@ pub enum PlaybackState {
                                          Try checking your system's audio settings or restarting your audio service.", e))
      })?;
 
-     let sink = match Sink::try_new(&stream_handle) {
-         Ok(s) => s,
-         Err(e) => {
-             return Err(error::AppError::Audio(format!(
-                 "Failed to create audio sink: {}. This could be due to:\n\
-                 - Audio device is busy or locked by another application\n\
-                 - Missing required audio codecs\n\
-                 Try closing other audio applications or checking your audio setup.", e
-             )));
-         }
-     };
+     let sink = Sink::connect_new(stream_handle.mixer());
 
      // Create channels for logging and control
      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);

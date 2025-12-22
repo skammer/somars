@@ -38,6 +38,7 @@ playback-error = Playback error: {$error}
 starting-playback = Starting playback of {$station}
 failed-playback = Failed to start playback
 failed-audio-sink = Failed to lock audio sink
+failed-decoder-construction = Failed to construct audio decoder: {$error}
 stream-from = Initializing stream from: {$url}
 got-response = Got response, starting stream...
 bit-rate = Bit rate: {$rate}kbps

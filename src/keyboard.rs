@@ -4,6 +4,7 @@ use stream_download::http::reqwest::Client as StreamClient;
 use icy_metadata::RequestIcyMetadata;
 use tokio::sync::mpsc::Sender;
 use std::time::Instant;
+use rodio;
 
 /// Parse a key event and return the corresponding command if applicable
 pub fn parse_key_event(key: KeyCode) -> Option<ControlCommand> {
@@ -180,9 +181,29 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                     add_log(format!("{}", t("stream-from").replace("{$url}", &station_url)), MessageType::System).await;
                     // We need to add a header to tell the Icecast server that we can parse the metadata embedded
                     // within the stream itself.
-                    let client = StreamClient::builder().request_icy_metadata().build()?;
+                    let client = match StreamClient::builder().request_icy_metadata().build() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            add_log(format!("Error creating HTTP client: {}", e), MessageType::Error).await;
+                            return Ok(());
+                        }
+                    };
 
-                    let stream = stream_download::http::HttpStream::new(client, station_url.to_string().parse()?).await?;
+                    let url = match station_url.to_string().parse() {
+                        Ok(u) => u,
+                        Err(e) => {
+                            add_log(format!("Error parsing station URL: {}", e), MessageType::Error).await;
+                            return Ok(());
+                        }
+                    };
+
+                    let stream = match stream_download::http::HttpStream::new(client, url).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            add_log(format!("Error creating HTTP stream: {}", e), MessageType::Error).await;
+                            return Ok(());
+                        }
+                    };
 
                     let icy_headers = icy_metadata::IcyHeaders::parse_from_headers(stream.headers());
 
@@ -220,8 +241,10 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                             // Create a channel for metadata updates
                             let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::channel(32);
 
-                            let decoder = tokio::task::spawn_blocking(move || {
-                                crate::mp3_stream_decoder::Mp3StreamDecoder::new(icy_metadata::IcyMetadataReader::new(
+                            let decoder_result = tokio::task::spawn_blocking(move || {
+                                // Use rodio's Decoder which now uses Symphonia by default
+                                // For streaming data, we need to use Decoder::new() or similar approach
+                                rodio::Decoder::new(icy_metadata::IcyMetadataReader::new(
                                     reader,
                                     icy_headers.metadata_interval(),
                                     move |metadata| {
@@ -232,7 +255,15 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                                         }
                                     }
                                 ))
-                            }).await?;
+                            }).await;
+
+                            let decoder_result = match decoder_result {
+                                Ok(decoder_inner_result) => decoder_inner_result,
+                                Err(join_error) => {
+                                    let _ = add_log(t("failed-decoder-construction").replace("{$error}", &join_error.to_string()), MessageType::Error).await;
+                                    return Ok(());
+                                }
+                            };
 
                             // Spawn a task to handle metadata updates
                             tokio::spawn({
@@ -245,13 +276,18 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                             });
 
                             // Start playback with the new decoder
-                            {
-                                let locked_sink = sink.lock().unwrap();
-                                locked_sink.append(decoder.unwrap());
-                                locked_sink.set_volume(volume);
-                                locked_sink.play();
+                            if let Ok(audio_decoder) = decoder_result {
+                                {
+                                    let locked_sink = sink.lock().unwrap();
+                                    locked_sink.append(audio_decoder);
+                                    locked_sink.set_volume(volume);
+                                    locked_sink.play();
+                                }
+                                true
+                            } else {
+                                let _ = add_log(t("failed-decoder-construction"), MessageType::Error).await;
+                                false
                             }
-                            true
                         },
                         Err(_) => {
                             let _ = add_log(t("failed-playback"), MessageType::Error).await;

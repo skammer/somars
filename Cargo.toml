@@ -20,7 +20,7 @@ futures = "0.3"
 futures-util = "0.3"
 ratatui = "0.29.0"
 reqwest = { version = "0.12.26", features = ["json", "stream"] }
-rodio = { version = "0.17", features = ["symphonia-all"] }
+rodio = { version = "0.21.1", features = ["symphonia-all", "playback"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.146"
 tokio = { version = "1.0", features = ["full", "net"] }
@@ -31,7 +31,6 @@ stream-download = { version = "0.22.9", features = [
     "async-read",
 ] }
 url = "2.5.4"
-minimp3 = "0.6.1"
 icy-metadata = { version = "0.5.1", features = ["serde", "reqwest"] }
 fluent = "0.17.0"
 fluent-bundle = "0.16.0"
