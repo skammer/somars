@@ -46,6 +46,7 @@ udp-starting = Запуск UDP-слушателя на порту {$port}
 udp-error = Ошибка UDP: {$error}
 station-not-found = Станция с ID не найдена: {$id}
 auto-playing = Автоматическое воспроизведение станции: {$id}
+underrun-detected = Аудио буфер пуст, перезапуск воспроизведения...
 
 # Help screen
 help-title = Справка

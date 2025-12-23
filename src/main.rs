@@ -31,6 +31,7 @@ mod control;
 mod config;
 mod ui;
 mod utils;
+mod audio_monitor;
 use control::ControlCommand;
 use i18n::t;
 
@@ -99,6 +100,9 @@ pub struct App {
     pub playback_start_time: Option<std::time::Instant>,
     pub total_played: std::time::Duration,
     pub last_pause_time: Option<std::time::Instant>,
+    pub last_underrun_check: Option<std::time::Instant>,
+    pub last_position: std::time::Duration,
+    pub underrun_detected: bool,
 }
 
 #[derive(Clone)]
@@ -202,6 +206,9 @@ pub enum PlaybackState {
          playback_start_time: None,
          total_played: std::time::Duration::default(),
          last_pause_time: None,
+         last_underrun_check: None,
+         last_position: std::time::Duration::default(),
+         underrun_detected: false,
      };
      
      // Store the station ID to auto-play
@@ -215,6 +222,9 @@ pub enum PlaybackState {
              Err(e) => tx.send(Err(e)).await,
          }
      });
+
+     // Initialize variables for audio monitoring
+     let mut last_position = std::time::Duration::default();
 
      // Main event loop
      let tick_rate = Duration::from_millis(250);
@@ -288,6 +298,64 @@ pub enum PlaybackState {
              app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
              if matches!(app.playback_state, PlaybackState::Playing) {
                  app.playback_frame_index = (app.playback_frame_index + 1) % app.playback_frames.len();
+             }
+
+             // Check for audio underruns
+             if matches!(app.playback_state, PlaybackState::Playing) {
+                 let mut potential_underrun = false;
+                 let mut current_pos = std::time::Duration::default();
+                 let now = Instant::now();
+
+                 if let Some(ref sink) = app.sink {
+                     if let Ok(sink_guard) = sink.lock() {
+                         // Check if the queue is running dry
+                         let queue_empty = sink_guard.empty();
+                         let queue_len = sink_guard.len();
+
+                         // Get current playback position
+                         current_pos = sink_guard.get_pos();
+
+                         // Check if playback has stalled
+                         let should_have_progressed = if let Some(start_time) = app.playback_start_time {
+                             now.duration_since(start_time)
+                         } else {
+                             std::time::Duration::default()
+                         };
+
+                         // Calculate if we're falling behind
+                         let pos_diff = if current_pos > last_position {
+                             current_pos - last_position
+                         } else {
+                             std::time::Duration::default()
+                         };
+
+                         // Check for potential underrun conditions
+                         potential_underrun = queue_empty ||
+                             (queue_len == 0 && !sink_guard.is_paused()) ||
+                             (pos_diff.as_millis() == 0 && should_have_progressed.as_millis() > 5000); // No progress in 5 seconds
+                     }
+                 }
+
+                 // Update last position for next check
+                 last_position = current_pos;
+
+                 if potential_underrun {
+                     app.underrun_detected = true;
+
+                     // Log the underrun detection
+                     let _ = log_tx.send(HistoryMessage {
+                         message: t("underrun-detected"),
+                         message_type: MessageType::Error,
+                         timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                     }).await;
+
+                     // Restart playback to recover from underrun
+                     audio_monitor::restart_playback(&mut app, &log_tx);
+                 } else {
+                     app.underrun_detected = false;
+                 }
+
+                 app.last_underrun_check = Some(now);
              }
          }
 
