@@ -367,6 +367,10 @@ pub fn handle_stop(app: &mut App) {
             }
         }
     }
+
+    // Reset restart attempts when user manually stops playback
+    app.restart_attempts = 0;
+    app.last_restart_time = None;
 }
 
 pub fn handle_pause(app: &mut App) {
@@ -387,6 +391,10 @@ pub fn handle_pause(app: &mut App) {
             }
         }
     }
+
+    // Reset restart attempts when user pauses playback
+    app.restart_attempts = 0;
+    app.last_restart_time = None;
 }
 
 pub fn handle_resume(app: &mut App, log_tx: &Sender<HistoryMessage>) {

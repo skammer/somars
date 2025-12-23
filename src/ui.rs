@@ -13,7 +13,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Fill(1),   // History
-                Constraint::Length(1), // Bottom controls
+                Constraint::Length(2), // Bottom controls with padding
             ]
             .as_ref(),
         )
@@ -128,7 +128,9 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         ]),
     ]);
 
-    let bottom_bar = Paragraph::new(bottom_controls).alignment(ratatui::layout::Alignment::Left);
+    let bottom_bar = Paragraph::new(bottom_controls)
+        .alignment(ratatui::layout::Alignment::Left)
+        .block(Block::default().padding(ratatui::widgets::Padding::new(1, 1, 1, 0)));
 
     // TODO: decide which option looks better
     f.render_widget(bottom_bar, app_layout[1]);

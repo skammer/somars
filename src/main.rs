@@ -105,6 +105,8 @@ pub struct App {
     pub underrun_detected: bool,
     pub station_loading: bool,
     pub playback_start_time_for_underrun: Option<std::time::Instant>,
+    pub last_restart_time: Option<std::time::Instant>,
+    pub restart_attempts: u32,
 }
 
 #[derive(Clone)]
@@ -213,6 +215,8 @@ pub enum PlaybackState {
          underrun_detected: false,
          station_loading: false,
          playback_start_time_for_underrun: None,
+         last_restart_time: None,
+         restart_attempts: 0,
      };
      
      // Store the station ID to auto-play
@@ -292,6 +296,8 @@ pub enum PlaybackState {
              // Check if this is a special message to clear station loading flag
              if log_msg.message == "CLEAR_STATION_LOADING" {
                  app.station_loading = false;
+                 // Reset restart attempts when station loads successfully
+                 app.restart_attempts = 0;
              } else {
                  app.history.push(log_msg);
              }
@@ -355,7 +361,19 @@ pub enum PlaybackState {
                      false // If no start time recorded, assume we're in grace period
                  };
 
-                 if potential_underrun && !app.station_loading && past_grace_period {
+                 // Calculate the required backoff time (exponential backoff: 0.5s, 1s, 2s, 4s, 8s, 16s, max 30s)
+                 let required_backoff = std::time::Duration::from_secs_f64(
+                     (0.5 * (2_f64.powi(app.restart_attempts as i32))).min(30.0)
+                 );
+
+                 // Check if enough time has passed since the last restart
+                 let past_backoff_period = if let Some(last_restart) = app.last_restart_time {
+                     now.duration_since(last_restart) >= required_backoff
+                 } else {
+                     true // If no previous restart, we can restart immediately
+                 };
+
+                 if potential_underrun && !app.station_loading && past_grace_period && past_backoff_period {
                      app.underrun_detected = true;
 
                      // Log the underrun detection
@@ -364,6 +382,10 @@ pub enum PlaybackState {
                          message_type: MessageType::Error,
                          timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                      }).await;
+
+                     // Update restart tracking
+                     app.last_restart_time = Some(now);
+                     app.restart_attempts = app.restart_attempts.saturating_add(1);
 
                      // Restart playback to recover from underrun
                      audio_monitor::restart_playback(&mut app, &log_tx);
