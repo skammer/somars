@@ -46,7 +46,7 @@ udp-starting = Starting UDP command listener on port {$port}
 udp-error = UDP error: {$error}
 station-not-found = Station ID not found: {$id}
 auto-playing = Auto-playing station: {$id}
-underrun-detected = Audio underrun detected, restarting playback...
+underrun-detected = Audio buffer underrun detected, restarting playback...
 
 # Help screen
 help-title = Help
