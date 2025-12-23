@@ -239,26 +239,6 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 Line::from(""),
                 Line::from(Span::raw(&station.description)),
                 Line::from(""),
-                Line::from(vec![
-                    Span::styled(
-                        format!("{}: ", t("playback-time")),
-                        Style::default().fg(Color::Yellow),
-                    ),
-                    Span::raw({
-                        let total = match app.playback_state {
-                            PlaybackState::Playing => {
-                                let base = app.total_played;
-                                if let Some(start) = app.playback_start_time {
-                                    base + start.elapsed()
-                                } else {
-                                    base
-                                }
-                            }
-                            _ => app.total_played,
-                        };
-                        format_duration(total)
-                    }),
-                ]),
             ])
             .wrap(ratatui::widgets::Wrap { trim: true })
         } else {
@@ -388,8 +368,28 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 .title(t("history"))
                 .title(Line::from("[jk]").right_aligned())
                 .title_bottom(
-                    Line::from(format!("[{} / {}]", selected_history_pos, total_history))
-                        .right_aligned(),
+                    Line::from(vec![Span::raw(format!(
+                        "[{} / {}]",
+                        selected_history_pos, total_history
+                    ))])
+                    .right_aligned(),
+                )
+                .title_bottom(
+                    Line::from(vec![Span::raw(format!("[{}]", {
+                        let total = match app.playback_state {
+                            PlaybackState::Playing => {
+                                let base = app.total_played;
+                                if let Some(start) = app.playback_start_time {
+                                    base + start.elapsed()
+                                } else {
+                                    base
+                                }
+                            }
+                            _ => app.total_played,
+                        };
+                        format_duration(total)
+                    }))])
+                    .left_aligned(),
                 )
                 .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
         )
