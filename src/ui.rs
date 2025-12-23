@@ -20,6 +20,16 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         .split(f.area());
 
     // Bottom controls bar
+    let sink_len = if let Some(ref sink) = app.sink {
+        if let Ok(sink_guard) = sink.lock() {
+            sink_guard.len()
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
     let bottom_controls = Line::from(vec![
         Span::styled("q", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
         Span::raw(format!(":{} ", t("controls-quit"))),
@@ -31,6 +41,8 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         Span::raw(format!(":{} ", t("controls-volume"))),
         Span::styled("?", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
         Span::raw(format!(":{} ", t("controls-help"))),
+        Span::raw("  "),
+        Span::styled(format!("Sink: {}", sink_len), Style::default().fg(Color::Cyan)),
     ]);
 
 
