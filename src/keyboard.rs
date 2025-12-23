@@ -141,7 +141,10 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
         if let Some(station) = app.stations.get(index).cloned() {
             if let Some(original_sink) = &app.sink {
                 app.active_station = Some(index);
-                app.playback_start_time = Some(std::time::Instant::now());
+                let current_time = std::time::Instant::now();
+                app.playback_start_time = Some(current_time);
+                app.playback_start_time_for_underrun = Some(current_time); // Set for underrun grace period
+                app.station_loading = true; // Set loading flag when starting new station
                 if let Some(pause_time) = app.last_pause_time.take() {
                     if let Some(start) = app.playback_start_time {
                         app.total_played += pause_time.duration_since(start);
@@ -324,6 +327,12 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                         let _ = log_tx_clone_2.send(HistoryMessage {
                             message: t("connecting-to-stream"),
                             message_type: MessageType::System,
+                            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                        }).await;
+                        // Send a message to clear the station loading flag after successful playback
+                        let _ = log_tx_clone_2.send(HistoryMessage {
+                            message: "CLEAR_STATION_LOADING".to_string(),
+                            message_type: MessageType::Background,
                             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                         }).await;
                     }

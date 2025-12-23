@@ -13,7 +13,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Fill(1),   // History
-                Constraint::Length(1), // Bottom controls
+                Constraint::Length(2), // Bottom controls
             ]
             .as_ref(),
         )
@@ -30,48 +30,53 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         0
     };
 
-    let bottom_controls = Line::from(vec![
-        Span::styled(
-            "q",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        ),
-        Span::raw(format!(":{} ", t("controls-quit"))),
-        Span::styled(
-            "↵",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        ),
-        Span::raw(format!(":{} ", t("controls-play"))),
-        Span::styled(
-            "Space",
-            Style::default()
-                .fg(Color::Blue)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        ),
-        Span::raw(format!(":{}/{} ", t("controls-stop"), t("controls-start"))),
-        Span::styled(
-            "+/-",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        ),
-        Span::raw(format!(":{} ", t("controls-volume"))),
-        Span::styled(
-            "?",
-            Style::default()
-                .fg(Color::Magenta)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        ),
-        Span::raw(format!(":{} ", t("controls-help"))),
-        Span::raw("  "),
-        Span::styled(
-            format!("Sink: {}", sink_len),
-            Style::default().fg(Color::Cyan),
-        ),
-    ]);
+    let bottom_controls = vec![
+        // top padding so to speak
+        Line::from(vec![Span::raw("\n")]),
+        Line::from(vec![
+            Span::raw(" "),
+            Span::styled(
+                "q",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(":{} ", t("controls-quit"))),
+            Span::styled(
+                "↵",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(":{} ", t("controls-play"))),
+            Span::styled(
+                "Space",
+                Style::default()
+                    .fg(Color::Blue)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(":{}/{} ", t("controls-stop"), t("controls-start"))),
+            Span::styled(
+                "+/-",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(":{} ", t("controls-volume"))),
+            Span::styled(
+                "?",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(":{} ", t("controls-help"))),
+            Span::raw("  "),
+            Span::styled(
+                format!("Sink: {}", sink_len),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]),
+    ];
 
     let _bottom_controls_alt = Paragraph::new(vec![
         Line::from(vec![

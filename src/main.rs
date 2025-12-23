@@ -103,6 +103,8 @@ pub struct App {
     pub last_underrun_check: Option<std::time::Instant>,
     pub last_position: std::time::Duration,
     pub underrun_detected: bool,
+    pub station_loading: bool,
+    pub playback_start_time_for_underrun: Option<std::time::Instant>,
 }
 
 #[derive(Clone)]
@@ -209,6 +211,8 @@ pub enum PlaybackState {
          last_underrun_check: None,
          last_position: std::time::Duration::default(),
          underrun_detected: false,
+         station_loading: false,
+         playback_start_time_for_underrun: None,
      };
      
      // Store the station ID to auto-play
@@ -285,7 +289,12 @@ pub enum PlaybackState {
 
          // Check for log messages
          while let Ok(log_msg) = log_rx.try_recv() {
-             app.history.push(log_msg);
+             // Check if this is a special message to clear station loading flag
+             if log_msg.message == "CLEAR_STATION_LOADING" {
+                 app.station_loading = false;
+             } else {
+                 app.history.push(log_msg);
+             }
          }
 
          // Process control commands
@@ -339,7 +348,14 @@ pub enum PlaybackState {
                  // Update last position for next check
                  last_position = current_pos;
 
-                 if potential_underrun {
+                 // Check if we're past the grace period (first 5 seconds after playback starts)
+                 let past_grace_period = if let Some(start_time) = app.playback_start_time_for_underrun {
+                     now.duration_since(start_time).as_secs() > 5
+                 } else {
+                     false // If no start time recorded, assume we're in grace period
+                 };
+
+                 if potential_underrun && !app.station_loading && past_grace_period {
                      app.underrun_detected = true;
 
                      // Log the underrun detection
