@@ -83,6 +83,20 @@ impl Config {
     }
 
     pub fn default_config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+        // On macOS, try to use ~/.config/somars/config.toml if available
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(home_dir) = dirs::home_dir() {
+                let config_path = home_dir.join(".config").join("somars").join("config.toml");
+                // Check if the directory exists or we can create it
+                let config_dir = home_dir.join(".config").join("somars");
+                if config_dir.exists() || std::fs::create_dir_all(&config_dir).is_ok() {
+                    return Ok(config_path);
+                }
+            }
+        }
+
+        // For other platforms or if ~/.config approach fails, use the default
         let config_dir = dirs::config_dir()
             .ok_or("Could not determine config directory")?;
         Ok(config_dir.join("somars").join("config.toml"))
