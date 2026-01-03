@@ -56,8 +56,8 @@ pub struct HistoryMessage {
 #[command(version, about)]
 struct Cli {
     /// Log level (1=minimal, 2=verbose)
-    #[arg(long, default_value_t = 1)]
-    log_level: u8,
+    #[arg(long)]
+    log_level: Option<u8>,
 
     /// Station ID to automatically play on startup
     #[arg(short, long)]
@@ -78,6 +78,14 @@ struct Cli {
     /// Set the locale (en, ru)
     #[arg(short = 'L', long)]
     locale: Option<String>,
+
+    /// Print the config file path and exit
+    #[arg(long)]
+    print_config_path: bool,
+
+    /// Path to config file
+    #[arg(long)]
+    config: Option<String>,
 }
 
 pub struct App {
@@ -119,10 +127,25 @@ pub enum PlaybackState {
  #[tokio::main]
  async fn main() -> Result<(), error::AppError> {
      let cli = Cli::parse();
-     
+
+     // Handle print config path mode
+     if cli.print_config_path {
+         match config::Config::config_path() {
+             Ok(path) => {
+                 println!("{}", path.display());
+                 return Ok(());
+             }
+             Err(e) => {
+                 eprintln!("Error getting config path: {}", e);
+                 return Err(error::AppError::Generic(format!("Failed to get config path: {}", e)));
+             }
+         }
+     }
+
      // Load configuration
-     let config = config::Config::load().unwrap_or_default();
-     
+     let config = config::Config::load_from_path(cli.config.clone()).unwrap_or_default();
+     let config_file_path = cli.config.clone();
+
      // Initialize i18n
      i18n::init(cli.locale.clone());
 
@@ -206,7 +229,7 @@ pub enum PlaybackState {
          playback_frames: vec!["▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮"],
          playback_frame_index: 0,
          show_help: false,
-         log_level: cli.log_level.max(config.log_level), // Use CLI flag if higher than config
+         log_level: cli.log_level.unwrap_or(config.log_level), // Use CLI value if provided, otherwise config value
          playback_start_time: None,
          total_played: std::time::Duration::default(),
          last_pause_time: None,
@@ -421,8 +444,14 @@ pub enum PlaybackState {
                  }
              }
              
-             if let Err(e) = config.save() {
-                 eprintln!("Failed to save config: {}", e);
+             if let Some(path) = &config_file_path {
+                 if let Err(e) = config.save_to_path(path) {
+                     eprintln!("Failed to save config to {}: {}", path, e);
+                 }
+             } else {
+                 if let Err(e) = config.save() {
+                     eprintln!("Failed to save config: {}", e);
+                 }
              }
              
              break;

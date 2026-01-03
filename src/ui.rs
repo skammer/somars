@@ -30,7 +30,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         0
     };
 
-    let bottom_controls = Line::from(vec![
+    let mut bottom_controls_spans = vec![
         Span::styled(
             "q",
             Style::default()
@@ -66,12 +66,19 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 .add_modifier(ratatui::style::Modifier::BOLD),
         ),
         Span::raw(format!(":{} ", t("controls-help"))),
-        Span::raw("  "),
-        Span::styled(
-            format!("Sink: {}", sink_len),
-            Style::default().fg(Color::Cyan),
-        ),
-    ]);
+    ];
+
+    if app.log_level > 1 {
+        bottom_controls_spans.extend(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!("Sink: {}", sink_len),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]);
+    }
+
+    let bottom_controls = Line::from(bottom_controls_spans);
 
     let _bottom_controls_alt = Paragraph::new(vec![
         Line::from(vec![

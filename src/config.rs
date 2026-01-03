@@ -42,7 +42,16 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let config_path = Self::config_path()?;
+        Self::load_from_path(None)
+    }
+
+    pub fn load_from_path(path: Option<String>) -> Result<Self, Box<dyn std::error::Error>> {
+        let config_path = if let Some(path_str) = path {
+            PathBuf::from(path_str)
+        } else {
+            Self::default_config_path()?
+        };
+
         if config_path.exists() {
             let content = fs::read_to_string(&config_path)?;
             let config: Config = toml::from_str(&content)?;
@@ -54,7 +63,7 @@ impl Config {
     }
 
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let config_path = Self::config_path()?;
+        let config_path = Self::default_config_path()?;
         let content = toml::to_string_pretty(self)?;
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)?;
@@ -63,10 +72,25 @@ impl Config {
         Ok(())
     }
 
-    fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    pub fn save_to_path(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let config_path = PathBuf::from(path);
+        let content = toml::to_string_pretty(self)?;
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(config_path, content)?;
+        Ok(())
+    }
+
+    pub fn default_config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
         let config_dir = dirs::config_dir()
             .ok_or("Could not determine config directory")?;
         Ok(config_dir.join("somars").join("config.toml"))
+    }
+
+    pub fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+        // For backward compatibility, call default_config_path
+        Self::default_config_path()
     }
 }
 
