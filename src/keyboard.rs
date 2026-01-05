@@ -1,10 +1,8 @@
 use crate::{App, MessageType, PlaybackState, HistoryMessage, t, control::ControlCommand};
+use crate::audio;
 use crossterm::event::KeyCode;
-use stream_download::http::reqwest::Client as StreamClient;
-use icy_metadata::RequestIcyMetadata;
 use tokio::sync::mpsc::Sender;
 use std::time::Instant;
-use rodio;
 
 /// Parse a key event and return the corresponding command if applicable
 pub fn parse_key_event(key: KeyCode) -> Option<ControlCommand> {
@@ -143,8 +141,8 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                 app.active_station = Some(index);
                 let current_time = std::time::Instant::now();
                 app.playback_start_time = Some(current_time);
-                app.playback_start_time_for_underrun = Some(current_time); // Set for underrun grace period
-                app.station_loading = true; // Set loading flag when starting new station
+                app.playback_start_time_for_underrun = Some(current_time);
+                app.station_loading = true;
                 if let Some(pause_time) = app.last_pause_time.take() {
                     if let Some(start) = app.playback_start_time {
                         app.total_played += pause_time.duration_since(start);
@@ -158,172 +156,29 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
 
                 let sink = original_sink.clone();
                 let log_tx_clone = log_tx.clone();
-                let station_url = station.url.clone();
-                let station_title = station.title.clone();
-                // Clone station_title for use in the completion handler async block
-                // (station_title is moved into the first async block for metadata updates)
-                let station_title_for_completion = station_title.clone();
+                let metadata_tx = app.metadata_tx.clone();
+                let station_title_for_completion = station.title.clone();
                 let volume = app.volume;
 
-                let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
-                    // Spawn a new task to handle audio playback
-                    let add_log = {
-                        let log_tx_clone = log_tx_clone.clone();
-                        move |msg: String, msg_type: MessageType| {
-                            let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
-                            let log_tx_clone = log_tx_clone.clone();
-                            async move {
-                                let history_message = HistoryMessage {
-                                    message: msg,
-                                    message_type: msg_type,
-                                    timestamp,
-                                };
-                                let _ = log_tx_clone.send(history_message).await;
+                // Use the audio module's start_playback function
+                let handle = tokio::spawn(async move {
+                    match audio::start_playback(
+                        &station,
+                        sink,
+                        metadata_tx,
+                        log_tx_clone.clone(),
+                        volume,
+                    ).await {
+                        Ok(inner_handle) => {
+                            // Wait for the inner playback task to complete
+                            match inner_handle.await {
+                                Ok(Ok(())) => Ok(()),
+                                Ok(Err(e)) => Err(e),
+                                Err(join_error) => Err(audio::AudioError::Other(format!("Join error: {}", join_error))),
                             }
                         }
-                    };
-
-                    add_log(format!("{}", t("stream-from").replace("{$url}", &station_url)), MessageType::System).await;
-                    // We need to add a header to tell the Icecast server that we can parse the metadata embedded
-                    // within the stream itself.
-                    let client = match StreamClient::builder().request_icy_metadata().build() {
-                        Ok(c) => c,
-                        Err(e) => {
-                            add_log(format!("Error creating HTTP client: {}", e), MessageType::Error).await;
-                            return Ok(());
-                        }
-                    };
-
-                    let url = match station_url.to_string().parse() {
-                        Ok(u) => u,
-                        Err(e) => {
-                            add_log(format!("Error parsing station URL: {}", e), MessageType::Error).await;
-                            return Ok(());
-                        }
-                    };
-
-                    let stream = match stream_download::http::HttpStream::new(client, url).await {
-                        Ok(s) => s,
-                        Err(e) => {
-                            add_log(format!("Error creating HTTP stream: {}", e), MessageType::Error).await;
-                            return Ok(());
-                        }
-                    };
-
-                    let icy_headers = icy_metadata::IcyHeaders::parse_from_headers(stream.headers());
-
-                    // buffer 5 seconds of audio
-                    // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
-                    // Default to 128 kbit/s if bitrate not available in ICY headers
-                    let bitrate = icy_headers.bitrate().unwrap_or(128);
-                    let prefetch_bytes = bitrate / 8 * 1024 * 5;
-
-                    let reader = match stream_download::StreamDownload::from_stream(
-                        stream,
-                        stream_download::storage::bounded::BoundedStorageProvider::new(
-                            stream_download::storage::memory::MemoryStorageProvider,
-                            std::num::NonZeroUsize::new(1024 * 1024)
-                                .expect("1024 * 1024 is guaranteed to be non-zero"),
-                        ),
-                        stream_download::Settings::default().prefetch_bytes(prefetch_bytes as u64),
-                    )
-                    .await {
-                        Ok(reader) => {
-                            add_log(t("got-response"), MessageType::Background).await;
-                            Ok(reader)
-                        },
-                        Err(e) => {
-                            add_log(format!("Error: {}", e), MessageType::Error).await;
-                            Err(e)
-                        }
-                    };
-
-                    add_log(t("bit-rate").replace("{$rate}", &format!("{:?}", bitrate)), MessageType::System).await;
-
-                    // Start new playback
-                    let playback_success = match reader {
-                        Ok(reader) => {
-                            // Clone add_log for use in the metadata handler
-                            let _add_log_clone = add_log.clone();
-
-                            // Create a channel for metadata updates
-                            let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::channel(32);
-
-                            let decoder_result = tokio::task::spawn_blocking(move || {
-                                // Use rodio's Decoder which now uses Symphonia by default
-                                // For streaming data, we need to use Decoder::new() or similar approach
-                                rodio::Decoder::new(icy_metadata::IcyMetadataReader::new(
-                                    reader,
-                                    icy_headers.metadata_interval(),
-                                    move |metadata| {
-                                        if let Ok(metadata) = metadata {
-                                            if let Some(title) = metadata.stream_title() {
-                                                let _ = metadata_tx.blocking_send(title.to_string());
-                                            }
-                                        }
-                                    }
-                                ))
-                            }).await;
-
-                            let decoder_result = match decoder_result {
-                                Ok(decoder_inner_result) => decoder_inner_result,
-                                Err(join_error) => {
-                                    let _ = add_log(t("failed-decoder-construction").replace("{$error}", &join_error.to_string()), MessageType::Error).await;
-                                    return Ok(());
-                                }
-                            };
-
-                            // Spawn a task to handle metadata updates
-                            tokio::spawn({
-                                let add_log = add_log.clone();
-                                async move {
-                                    while let Some(title) = metadata_rx.recv().await {
-                                        add_log(format!("{} :: {}", station_title, title), MessageType::Playback).await;
-                                    }
-                                }
-                            });
-
-                            // Start playback with the new decoder
-                            if let Ok(audio_decoder) = decoder_result {
-                                // Scope to ensure MutexGuard is dropped before any await
-                                let sink_op_result = {
-                                    let lock_result = sink.lock();
-                                    match lock_result {
-                                        Ok(locked_sink) => {
-                                            locked_sink.append(audio_decoder);
-                                            locked_sink.set_volume(volume);
-                                            locked_sink.play();
-                                            Ok(())
-                                        }
-                                        Err(_) => Err("Failed to lock audio sink (mutex poisoned)"),
-                                    }
-                                };
-
-                                // Handle any lock errors (now outside the lock scope)
-                                if let Err(e) = sink_op_result {
-                                    add_log(e.to_string(), MessageType::Error).await;
-                                    return Ok(());
-                                }
-
-                                true
-                            } else {
-                                let _ = add_log(t("failed-decoder-construction"), MessageType::Error).await;
-                                false
-                            }
-                        },
-                        Err(_) => {
-                            let _ = add_log(t("failed-playback"), MessageType::Error).await;
-                            false
-                        },
-                    };
-
-                    if playback_success {
-                        add_log(t("playback-started"), MessageType::System).await;
-                    } else {
-                        add_log(t("failed-audio-sink"), MessageType::Error).await;
+                        Err(e) => Err(e),
                     }
-
-                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
                 });
 
                 let log_tx_clone = log_tx.clone();
@@ -331,29 +186,38 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
 
                 tokio::spawn(async move {
                     let log_tx_clone_2 = log_tx_clone.clone();
-                    if let Err(e) = handle.await {
-                        let _ = log_tx_clone_2.send(HistoryMessage {
-                            message: t("playback-error").replace("{$error}", &e.to_string()),
-                            message_type: MessageType::Error,
-                            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                        }).await;
-                    } else {
-                        let _ = log_tx_clone_2.send(HistoryMessage {
-                            message: t("starting-playback").replace("{$station}", &station_title_for_completion),
-                            message_type: MessageType::System,
-                            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                        }).await;
-                        let _ = log_tx_clone_2.send(HistoryMessage {
-                            message: t("connecting-to-stream"),
-                            message_type: MessageType::System,
-                            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                        }).await;
-                        // Send a message to clear the station loading flag after successful playback
-                        let _ = log_tx_clone_2.send(HistoryMessage {
-                            message: "CLEAR_STATION_LOADING".to_string(),
-                            message_type: MessageType::Background,
-                            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                        }).await;
+                    match handle.await {
+                        Ok(Ok(())) => {
+                            let _ = log_tx_clone_2.send(HistoryMessage {
+                                message: t("starting-playback").replace("{$station}", &station_title_for_completion),
+                                message_type: MessageType::System,
+                                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                            }).await;
+                            let _ = log_tx_clone_2.send(HistoryMessage {
+                                message: t("connecting-to-stream"),
+                                message_type: MessageType::System,
+                                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                            }).await;
+                            let _ = log_tx_clone_2.send(HistoryMessage {
+                                message: "CLEAR_STATION_LOADING".to_string(),
+                                message_type: MessageType::Background,
+                                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                            }).await;
+                        }
+                        Ok(Err(e)) => {
+                            let _ = log_tx_clone_2.send(HistoryMessage {
+                                message: format!("Playback error: {}", e),
+                                message_type: MessageType::Error,
+                                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                            }).await;
+                        }
+                        Err(e) => {
+                            let _ = log_tx_clone_2.send(HistoryMessage {
+                                message: t("playback-error").replace("{$error}", &e.to_string()),
+                                message_type: MessageType::Error,
+                                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                            }).await;
+                        }
                     }
                 });
             }

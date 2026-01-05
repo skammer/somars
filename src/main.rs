@@ -110,6 +110,8 @@ pub struct App {
     pub history_scroll_state: ListState,
     pub should_quit: bool,
     pub sink: Option<Arc<Mutex<Sink>>>,
+    pub audio_manager: audio::AudioManager,
+    pub metadata_tx: tokio::sync::mpsc::Sender<audio::MetadataEvent>,
     pub loading: bool,
     pub spinner_state: usize,
     pub spinner_frames: Vec<&'static str>,
@@ -226,6 +228,9 @@ pub enum PlaybackState {
      let mut selected_station = ListState::default();
      selected_station.select(Some(0));
 
+     // Create metadata channel for audio playback
+     let (metadata_tx, _) = tokio::sync::mpsc::channel(32);
+
      let mut app = App {
          stations: Vec::new(),
          selected_station,
@@ -236,6 +241,8 @@ pub enum PlaybackState {
          history_scroll_state: ListState::default(),
          should_quit: false,
          sink: Some(Arc::new(Mutex::new(sink))),
+         audio_manager: audio::AudioManager::new(),
+         metadata_tx,
          loading: true,
          spinner_state: 0,
          volume: config.volume,

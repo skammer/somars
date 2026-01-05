@@ -5,6 +5,7 @@
 use super::metadata::MetadataEvent;
 use super::stream::{create_icy_client, calculate_prefetch_bytes, parse_bitrate_with_fallback, parse_url, StreamConfig};
 use super::types::{AudioError, AudioResult};
+use super::recovery::{RecoveryConfig, retry_with_backoff};
 use crate::i18n::t;
 use crate::MessageType;
 use rodio::{Decoder, Sink};
@@ -107,6 +108,11 @@ impl PlaybackHandle {
 ///
 /// # Returns
 /// A tokio task JoinHandle for the playback task
+///
+/// # Error Recovery
+/// This function will automatically retry transient network failures using
+/// exponential backoff. Permanent errors (like invalid URLs) are returned
+/// immediately without retrying.
 pub async fn start_playback(
     station: &crate::station::Station,
     sink: Arc<Mutex<Sink>>,
@@ -118,31 +124,50 @@ pub async fn start_playback(
 
     let station_url = station.url.clone();
     let station_title = station.title.clone();
+    let log_tx_for_stream = log_tx.clone();
 
-    // Create HTTP client with ICY metadata support
-    let client = create_icy_client()?;
+    // Use retry logic for stream connection
+    let (stream, icy_headers, bitrate) = retry_with_backoff(
+        || {
+            let station_url = station_url.clone();
+            let log_tx = log_tx_for_stream.clone();
+            async move {
+                // Create HTTP client with ICY metadata support
+                let client = create_icy_client()?;
 
-    // Parse URL
-    let url = parse_url(&station_url)?;
+                // Parse URL
+                let url = parse_url(&station_url)?;
 
-    // Create stream
-    let stream = HttpStream::new(client, url).await
-        .map_err(|e| AudioError::StreamConnectionFailed(format!("Failed to create HTTP stream: {}", e)))?;
+                // Create stream
+                let stream = HttpStream::new(client, url).await
+                    .map_err(|e| AudioError::StreamRetryable(format!("Failed to create HTTP stream: {}", e)))?;
 
-    // Parse ICY headers
-    let icy_headers = icy_metadata::IcyHeaders::parse_from_headers(stream.headers());
+                // Parse ICY headers
+                let icy_headers = icy_metadata::IcyHeaders::parse_from_headers(stream.headers());
 
-    // Calculate prefetch bytes
-    let config = StreamConfig::default();
-    let bitrate = parse_bitrate_with_fallback(icy_headers.bitrate(), &config);
-    let prefetch_bytes = calculate_prefetch_bytes(bitrate, config.prefetch_seconds);
+                // Calculate prefetch bytes
+                let config = StreamConfig::default();
+                let bitrate = parse_bitrate_with_fallback(icy_headers.bitrate(), &config);
 
-    // Send log about bitrate
-    let _ = log_tx.send(crate::HistoryMessage {
-        message: t("bit-rate").replace("{$rate}", &format!("{:?}", bitrate)),
-        message_type: MessageType::System,
-        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-    }).await;
+                // Send log about bitrate
+                let _ = log_tx.send(crate::HistoryMessage {
+                    message: t("bit-rate").replace("{$rate}", &format!("{:?}", bitrate)),
+                    message_type: MessageType::System,
+                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                }).await;
+
+                Ok((stream, icy_headers, bitrate))
+            }
+        },
+        RecoveryConfig {
+            max_retries: 5,
+            initial_backoff: std::time::Duration::from_millis(500),
+            max_backoff: std::time::Duration::from_secs(10),
+            backoff_multiplier: 2.0,
+        },
+    ).await?;
+
+    let prefetch_bytes = calculate_prefetch_bytes(bitrate, StreamConfig::default().prefetch_seconds);
 
     // Create stream download reader
     let reader = StreamDownload::from_stream(
