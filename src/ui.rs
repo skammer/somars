@@ -322,7 +322,8 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
             };
 
             // Format timestamp and message as separate columns
-            let timestamp_span = Span::styled(msg.timestamp.clone(), style);
+            // Use reference to avoid cloning timestamp in hot render path
+            let timestamp_span = Span::styled(&msg.timestamp, style);
 
             // Wrap just the message part
             let message_width = width.saturating_sub(10); // Timestamp width + separator
@@ -336,7 +337,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
             if let Some(first_line) = wrapped_lines.first() {
                 // First line has timestamp
                 lines.push(Line::from(vec![
-                    timestamp_span.clone(),
+                    timestamp_span,
                     Span::styled("  ", style),
                     Span::styled(first_line.clone(), style),
                 ]));

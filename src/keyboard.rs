@@ -160,7 +160,9 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                 let log_tx_clone = log_tx.clone();
                 let station_url = station.url.clone();
                 let station_title = station.title.clone();
-                let station_title_error = station_title.clone();
+                // Clone station_title for use in the completion handler async block
+                // (station_title is moved into the first async block for metadata updates)
+                let station_title_for_completion = station_title.clone();
                 let volume = app.volume;
 
                 let handle: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> = tokio::spawn(async move {
@@ -337,7 +339,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                         }).await;
                     } else {
                         let _ = log_tx_clone_2.send(HistoryMessage {
-                            message: t("starting-playback").replace("{$station}", &station_title_error),
+                            message: t("starting-playback").replace("{$station}", &station_title_for_completion),
                             message_type: MessageType::System,
                             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                         }).await;
