@@ -14,7 +14,9 @@ use ratatui::{
 };
 
 use std::{
+    collections::HashMap,
     io,
+    net::SocketAddr,
     sync::{Arc, Mutex},
     time::{Duration, Instant}
 };
@@ -478,7 +480,16 @@ pub enum PlaybackState {
 
 async fn send_udp_broadcast(message: &str, port: u16) -> Result<(), error::AppError> {
     use tokio::net::UdpSocket;
-    
+
+    // Validate message length to prevent potential abuse
+    const MAX_BROADCAST_MESSAGE_LEN: usize = 256;
+    if message.len() > MAX_BROADCAST_MESSAGE_LEN {
+        return Err(error::AppError::Udp(format!(
+            "Broadcast message too long: {} bytes (max: {})",
+            message.len(), MAX_BROADCAST_MESSAGE_LEN
+        )));
+    }
+
     let socket = UdpSocket::bind("0.0.0.0:0").await
         .map_err(|e| error::AppError::Udp(format!("Failed to bind UDP socket: {}", e)))?;
     socket.set_broadcast(true)
@@ -491,19 +502,53 @@ async fn send_udp_broadcast(message: &str, port: u16) -> Result<(), error::AppEr
 
 async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCommand>) -> Result<(), error::AppError> {
     use tokio::net::UdpSocket;
-    
+
     let socket = UdpSocket::bind(("0.0.0.0", port)).await
         .map_err(|e| error::AppError::Udp(format!("Failed to bind to port {}: {}", port, e)))?;
     let mut buf = [0; 1024];
 
+    // Rate limiting: max 10 requests per second per IP
+    const MAX_REQUESTS_PER_SECOND: u32 = 10;
+    const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(1);
+    let mut rate_tracker: HashMap<SocketAddr, Vec<Instant>> = HashMap::new();
+
     loop {
         let (len, addr) = socket.recv_from(&mut buf).await
             .map_err(|e| error::AppError::Udp(format!("Failed to receive UDP packet: {}", e)))?;
+
+        // Validate message length before processing
+        const MAX_UDP_MESSAGE_LEN: usize = 256;
+        if len > MAX_UDP_MESSAGE_LEN {
+            eprintln!("UDP packet from {} too large: {} bytes (max: {})", addr, len, MAX_UDP_MESSAGE_LEN);
+            continue;
+        }
+
+        // Rate limiting check
+        let now = Instant::now();
+        let timestamps = rate_tracker.entry(addr).or_insert_with(Vec::new);
+
+        // Remove timestamps older than the rate limit window
+        timestamps.retain(|&ts| now.duration_since(ts) < RATE_LIMIT_WINDOW);
+
+        // Check if rate limit exceeded
+        if timestamps.len() >= MAX_REQUESTS_PER_SECOND as usize {
+            eprintln!("UDP rate limit exceeded for {}: {} requests in last second", addr, timestamps.len());
+            continue;
+        }
+
+        // Record this request
+        timestamps.push(now);
+
+        // Clean up old entries from rate tracker periodically
+        if rate_tracker.len() > 100 {
+            rate_tracker.retain(|_, times| !times.is_empty());
+        }
+
         let msg = String::from_utf8_lossy(&buf[..len]).trim().to_lowercase();
-        
+
         // Log received command
         println!("Received UDP command from {}: {}", addr, msg);
-        
+
         let cmd = match msg.split_whitespace().collect::<Vec<_>>().as_slice() {
             ["play"] => ControlCommand::Play,
             ["stop"] => ControlCommand::Stop,
@@ -527,7 +572,14 @@ async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCom
             },
             ["tune", "next"] => ControlCommand::TuneNext,
             ["tune", "prev"] => ControlCommand::TunePrev,
-            ["tune", id] => ControlCommand::Tune(id.to_string()),
+            ["tune", id] => {
+                // Validate station ID format (alphanumeric, underscore, hyphen, max 32 chars)
+                if id.len() > 32 || !id.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                    eprintln!("Invalid station ID format: {}", id);
+                    continue;
+                }
+                ControlCommand::Tune(id.to_string())
+            },
             ["select", "up"] => ControlCommand::SelectUp,
             ["select", "down"] => ControlCommand::SelectDown,
             ["toggle"] => ControlCommand::Toggle,
@@ -536,7 +588,7 @@ async fn handle_udp_commands(port: u16, tx: tokio::sync::mpsc::Sender<ControlCom
                 continue;
             },
         };
-        
+
         tx.send(cmd).await
             .map_err(|e| error::AppError::Udp(format!("Failed to send command to app: {}", e)))?;
     }
