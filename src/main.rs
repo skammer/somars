@@ -14,7 +14,7 @@ use ratatui::{
 };
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     io,
     net::SocketAddr,
     sync::{Arc, Mutex},
@@ -52,6 +52,15 @@ pub struct HistoryMessage {
     pub message: String,
     pub message_type: MessageType,
     pub timestamp: String,
+}
+
+/// Helper function to add a history message to the app with automatic cleanup
+fn add_history_message(app: &mut App, message: HistoryMessage) {
+    app.history.push_back(message);
+    // Remove oldest entries if we exceed capacity
+    while app.history.len() > app.history_capacity {
+        app.history.pop_front();
+    }
 }
 
 #[derive(Parser)]
@@ -95,7 +104,8 @@ pub struct App {
     pub selected_station: ListState,
     pub active_station: Option<usize>,
     pub playback_state: PlaybackState,
-    pub history: Vec<HistoryMessage>,
+    pub history: VecDeque<HistoryMessage>,
+    pub history_capacity: usize,
     pub history_scroll_state: ListState,
     pub should_quit: bool,
     pub sink: Option<Arc<Mutex<Sink>>>,
@@ -220,7 +230,8 @@ pub enum PlaybackState {
          selected_station,
          active_station: None,
          playback_state: PlaybackState::Stopped,
-         history: Vec::new(),
+         history: VecDeque::new(),
+         history_capacity: 1000, // Keep max 1000 history messages
          history_scroll_state: ListState::default(),
          should_quit: false,
          sink: Some(Arc::new(Mutex::new(sink))),
@@ -288,13 +299,13 @@ pub enum PlaybackState {
                                  // Play the station
                                  keyboard::handle_play(&mut app, &log_tx);
 
-                                 app.history.push(HistoryMessage {
+                                 add_history_message(&mut app, HistoryMessage {
                                      message: t("auto-playing").replace("{$id}", station_id),
                                      message_type: MessageType::System,
                                      timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
                                  });
                              } else {
-                                 app.history.push(HistoryMessage {
+                                 add_history_message(&mut app, HistoryMessage {
                                      message: t("station-not-found").replace("{$id}", station_id),
                                      message_type: MessageType::Error,
                                      timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -303,7 +314,7 @@ pub enum PlaybackState {
                          }
                      }
                      Err(e) => {
-                         app.history.push(HistoryMessage {
+                         add_history_message(&mut app, HistoryMessage {
                              message: format!("Error loading stations: {}", e),
                              message_type: MessageType::Error,
                              timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -324,7 +335,7 @@ pub enum PlaybackState {
                  // Reset restart attempts when station loads successfully
                  app.restart_attempts = 0;
              } else {
-                 app.history.push(log_msg);
+                 add_history_message(&mut app, log_msg);
              }
          }
 
