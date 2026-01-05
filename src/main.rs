@@ -151,14 +151,22 @@ pub enum PlaybackState {
                  return Ok(());
              }
              Err(e) => {
-                 eprintln!("Error getting config path: {}", e);
-                 return Err(error::AppError::Generic(format!("Failed to get config path: {}", e)));
+                 eprintln!("Error: {}", e);
+                 return Err(error::AppError::Config(e.to_string()));
              }
          }
      }
 
-     // Load configuration
-     let config = config::Config::load_from_path(cli.config.clone()).unwrap_or_default();
+     // Load configuration with proper error handling
+     let config = match config::Config::load_from_path(cli.config.clone()) {
+         Ok(c) => c,
+         Err(e) => {
+             // Provide helpful error message for config loading failures
+             eprintln!("Warning: Failed to load configuration: {}", e);
+             eprintln!("Using default configuration. Run without --config to use default path, or fix the specified file.");
+             config::Config::default()
+         }
+     };
      let config_file_path = cli.config.clone();
 
      // Initialize i18n
@@ -452,29 +460,37 @@ pub enum PlaybackState {
 
          if app.should_quit {
              // Save configuration before quitting
-             let mut config = config::Config::load().unwrap_or_default();
+             let mut config = match config::Config::load() {
+                 Ok(c) => c,
+                 Err(e) => {
+                     eprintln!("Warning: Failed to load config for saving: {}", e);
+                     eprintln!("Creating new configuration file.");
+                     config::Config::default()
+                 }
+             };
              config.volume = app.volume;
              config.log_level = app.log_level;
              config.udp_port = udp_port;
              config.udp_enabled = udp_enabled;
-             
+
              // Save the last played station
              if let Some(index) = app.active_station {
                  if let Some(station) = app.stations.get(index) {
                      config.last_station = Some(station.id.clone());
                  }
              }
-             
-             if let Some(path) = &config_file_path {
-                 if let Err(e) = config.save_to_path(path) {
-                     eprintln!("Failed to save config to {}: {}", path, e);
-                 }
+
+             let save_result = if let Some(path) = &config_file_path {
+                 config.save_to_path(path)
              } else {
-                 if let Err(e) = config.save() {
-                     eprintln!("Failed to save config: {}", e);
-                 }
+                 config.save()
+             };
+
+             if let Err(e) = save_result {
+                 eprintln!("Warning: Failed to save configuration: {}", e);
+                 eprintln!("Your settings will not be persisted.");
              }
-             
+
              break;
          }
      }

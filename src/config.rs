@@ -1,6 +1,71 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::fmt;
+
+/// Configuration-specific errors
+#[derive(Debug)]
+pub enum ConfigError {
+    /// Could not determine config directory
+    NoConfigDir,
+    /// Failed to read config file
+    ReadError {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    /// Failed to parse config file
+    ParseError {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
+    /// Failed to write config file
+    WriteError {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    /// Failed to serialize config
+    SerializeError {
+        source: toml::ser::Error,
+    },
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConfigError::NoConfigDir => {
+                write!(f, "Could not determine configuration directory. \
+                          Please set HOME environment variable or ensure your platform's config directory is accessible.")
+            }
+            ConfigError::ReadError { path, source } => {
+                write!(f, "Failed to read configuration file '{}': {}", path.display(), source)
+            }
+            ConfigError::ParseError { path, source } => {
+                write!(f, "Failed to parse configuration file '{}': {}", path.display(), source)
+            }
+            ConfigError::WriteError { path, source } => {
+                write!(f, "Failed to write configuration file '{}': {}", path.display(), source)
+            }
+            ConfigError::SerializeError { source } => {
+                write!(f, "Failed to serialize configuration: {}", source)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ConfigError::NoConfigDir => None,
+            ConfigError::ReadError { source, .. } => Some(source),
+            ConfigError::ParseError { source, .. } => Some(source),
+            ConfigError::WriteError { source, .. } => Some(source),
+            ConfigError::SerializeError { source } => Some(source),
+        }
+    }
+}
+
+/// Result type for config operations
+pub type ConfigResult<T> = Result<T, ConfigError>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -41,11 +106,20 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+    /// Load configuration from default path
+    ///
+    /// Returns default config if the file doesn't exist.
+    /// Returns an error if the file exists but cannot be read or parsed.
+    pub fn load() -> ConfigResult<Self> {
         Self::load_from_path(None)
     }
 
-    pub fn load_from_path(path: Option<String>) -> Result<Self, Box<dyn std::error::Error>> {
+    /// Load configuration from a specific path or default
+    ///
+    /// If `path` is None, uses the default config path.
+    /// Returns default config if the file doesn't exist.
+    /// Returns an error if the file exists but cannot be read or parsed.
+    pub fn load_from_path(path: Option<String>) -> ConfigResult<Self> {
         let config_path = if let Some(path_str) = path {
             PathBuf::from(path_str)
         } else {
@@ -53,8 +127,16 @@ impl Config {
         };
 
         if config_path.exists() {
-            let content = fs::read_to_string(&config_path)?;
-            let config: Config = toml::from_str(&content)?;
+            let content = fs::read_to_string(&config_path)
+                .map_err(|source| ConfigError::ReadError {
+                    path: config_path.clone(),
+                    source,
+                })?;
+            let config: Config = toml::from_str(&content)
+                .map_err(|source| ConfigError::ParseError {
+                    path: config_path.clone(),
+                    source,
+                })?;
             Ok(config)
         } else {
             // Return default config if file doesn't exist
@@ -62,27 +144,34 @@ impl Config {
         }
     }
 
-    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+    /// Save configuration to default path
+    pub fn save(&self) -> ConfigResult<()> {
         let config_path = Self::default_config_path()?;
-        let content = toml::to_string_pretty(self)?;
-        if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(config_path, content)?;
-        Ok(())
+        self.save_to_path(&config_path.to_string_lossy())
     }
 
-    pub fn save_to_path(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    /// Save configuration to a specific path
+    pub fn save_to_path(&self, path: &str) -> ConfigResult<()> {
         let config_path = PathBuf::from(path);
-        let content = toml::to_string_pretty(self)?;
+        let content = toml::to_string_pretty(self)
+            .map_err(|source| ConfigError::SerializeError { source })?;
         if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent)
+                .map_err(|source| ConfigError::WriteError {
+                    path: config_path.clone(),
+                    source,
+                })?;
         }
-        fs::write(config_path, content)?;
+        fs::write(&config_path, content)
+            .map_err(|source| ConfigError::WriteError {
+                path: config_path,
+                source,
+            })?;
         Ok(())
     }
 
-    pub fn default_config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    /// Get the default configuration file path
+    pub fn default_config_path() -> ConfigResult<PathBuf> {
         // On macOS, try to use ~/.config/somars/config.toml if available
         #[cfg(target_os = "macos")]
         {
@@ -97,13 +186,12 @@ impl Config {
         }
 
         // For other platforms or if ~/.config approach fails, use the default
-        let config_dir = dirs::config_dir()
-            .ok_or("Could not determine config directory")?;
+        let config_dir = dirs::config_dir().ok_or(ConfigError::NoConfigDir)?;
         Ok(config_dir.join("somars").join("config.toml"))
     }
 
-    pub fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        // For backward compatibility, call default_config_path
+    /// Get the configuration file path (alias for default_config_path)
+    pub fn config_path() -> ConfigResult<PathBuf> {
         Self::default_config_path()
     }
 }
