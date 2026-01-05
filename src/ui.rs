@@ -1,3 +1,7 @@
+//! Terminal UI rendering for somars
+//!
+//! This module handles all UI rendering using ratatui.
+
 use crate::{t, utils::format_duration, App, MessageType, PlaybackState};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -6,20 +10,62 @@ use ratatui::{
     widgets::{Block, Borders, List, ListDirection, ListItem, Paragraph},
 };
 
-pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
-    // app layout - ui and controls
+/// Calculated layout rectangles for the application
+#[derive(Debug, Clone)]
+struct AppLayout {
+    /// The bottom controls bar area
+    bottom_controls: Rect,
+    /// The left panel (station list or loading)
+    left_panel: Rect,
+    /// The top-right panel (now playing)
+    right_top: Rect,
+    /// The bottom-right panel (history)
+    right_bottom: Rect,
+}
+
+/// Calculate the layout rectangles for the application
+fn calculate_layout(area: Rect) -> AppLayout {
+    // Main vertical split: content area and bottom controls
     let app_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Fill(1),   // History
-                Constraint::Length(2), // Bottom controls with padding
+                Constraint::Fill(1),   // Content area
+                Constraint::Length(2), // Bottom controls
             ]
             .as_ref(),
         )
-        .split(f.area());
+        .split(area);
 
-    // Bottom controls bar
+    // Horizontal split: station list and playback/history
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+        .split(app_layout[0]);
+
+    // Vertical split of right panel: now playing and history
+    let right_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(10), // Now Playing
+                Constraint::Fill(1),    // History
+            ]
+            .as_ref(),
+        )
+        .split(chunks[1]);
+
+    AppLayout {
+        bottom_controls: app_layout[1],
+        left_panel: chunks[0],
+        right_top: right_chunks[0],
+        right_bottom: right_chunks[1],
+    }
+}
+
+/// Render the bottom controls bar
+fn render_bottom_controls(f: &mut ratatui::Frame, app: &App, area: Rect) {
+    // Get sink length for debug display
     let sink_len = if let Some(ref sink) = app.sink {
         if let Ok(sink_guard) = sink.lock() {
             sink_guard.len()
@@ -30,6 +76,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         0
     };
 
+    // Build control key spans
     let mut bottom_controls_spans = vec![
         Span::styled(
             "q",
@@ -68,6 +115,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
         Span::raw(format!(":{} ", t("controls-help"))),
     ];
 
+    // Add debug info if log level is high
     if app.log_level > 1 {
         bottom_controls_spans.extend(vec![
             Span::raw("  "),
@@ -79,139 +127,76 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
     }
 
     let bottom_controls = Line::from(bottom_controls_spans);
-
-    let _bottom_controls_alt = Paragraph::new(vec![
-        Line::from(vec![
-            Span::styled(
-                "Play [↵]",
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(ratatui::style::Modifier::REVERSED),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                "Pause [space]",
-                Style::default()
-                    .fg(Color::Blue)
-                    .add_modifier(ratatui::style::Modifier::REVERSED),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                "Stop [s]",
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(ratatui::style::Modifier::REVERSED),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                "Quit [q]",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(ratatui::style::Modifier::REVERSED),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                "Volume [+/-]",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(ratatui::style::Modifier::REVERSED),
-            ),
-            Span::raw(format!(" ({:.0}%)", app.volume * 100.0)),
-        ]),
-        Line::from(vec![
-            Span::raw("Status: "),
-            Span::styled(
-                match app.playback_state {
-                    PlaybackState::Playing => "Playing",
-                    PlaybackState::Paused => "Paused",
-                    PlaybackState::Stopped => "Stopped",
-                },
-                match app.playback_state {
-                    PlaybackState::Playing => Style::default().fg(Color::Green),
-                    PlaybackState::Paused => Style::default().fg(Color::Blue),
-                    PlaybackState::Stopped => Style::default().fg(Color::Red),
-                },
-            ),
-        ]),
-    ]);
-
     let bottom_bar = Paragraph::new(bottom_controls)
         .alignment(ratatui::layout::Alignment::Left)
         .block(Block::default().padding(ratatui::widgets::Padding::new(1, 1, 1, 0)));
 
-    // TODO: decide which option looks better
-    f.render_widget(bottom_bar, app_layout[1]);
-    // f.render_widget(bottom_controls_alt, app_layout[1]);
+    f.render_widget(bottom_bar, area);
+}
 
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-        .split(app_layout[0]);
-
-    // Left panel - Station list or loading indicator
+/// Render the station list (left panel)
+fn render_station_list(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
     if app.loading {
-        let loading_text = vec![Line::from(vec![
-            Span::raw(app.spinner_frames[app.spinner_state]),
-            Span::raw(format!(" {}", t("loading-stations"))),
-        ])];
-        let loading_para = Paragraph::new(loading_text)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(t("loading"))
-                    .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
-            )
-            .alignment(ratatui::layout::Alignment::Center);
-        f.render_widget(loading_para, chunks[0]);
+        render_loading_indicator(f, app, area);
     } else {
-        let station_items: Vec<ListItem> = app
-            .stations
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let style = if Some(i) == app.active_station {
-                    Style::default().add_modifier(ratatui::style::Modifier::UNDERLINED)
-                } else {
-                    Style::default()
-                };
-                ListItem::new(Span::styled(s.title.as_str(), style))
-            })
-            .collect();
-
-        let selected_pos = app.selected_station.selected().unwrap_or(0) + 1;
-        let total_stations = app.stations.len();
-        let stations_list = List::new(station_items)
-            .block(
-                Block::bordered()
-                    .title(Line::from(t("stations")))
-                    .title(Line::from("[↓↑]").right_aligned())
-                    .title_bottom(
-                        Line::from(format!("[{} / {}]", selected_pos, total_stations))
-                            .right_aligned(),
-                    )
-                    .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
-            )
-            // .highlight_style(Style::default())
-            // .highlight_symbol(">>")
-            .repeat_highlight_symbol(true)
-            .highlight_style(Style::default().bg(Color::Blue));
-
-        f.render_stateful_widget(stations_list, chunks[0], &mut app.selected_station);
+        render_stations(f, app, area);
     }
+}
 
-    // Right panel - Playback controls and info
-    let right_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Length(10), // Now Playing
-                Constraint::Fill(1),    // History
-            ]
-            .as_ref(),
+/// Render the loading indicator
+fn render_loading_indicator(f: &mut ratatui::Frame, app: &App, area: Rect) {
+    let loading_text = vec![Line::from(vec![
+        Span::raw(app.spinner_frames[app.spinner_state]),
+        Span::raw(format!(" {}", t("loading-stations"))),
+    ])];
+    let loading_para = Paragraph::new(loading_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(t("loading"))
+                .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
         )
-        .split(chunks[1]);
+        .alignment(ratatui::layout::Alignment::Center);
+    f.render_widget(loading_para, area);
+}
 
-    // Now Playing
+/// Render the stations list
+fn render_stations(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
+    let station_items: Vec<ListItem> = app
+        .stations
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let style = if Some(i) == app.active_station {
+                Style::default().add_modifier(ratatui::style::Modifier::UNDERLINED)
+            } else {
+                Style::default()
+            };
+            ListItem::new(Span::styled(s.title.as_str(), style))
+        })
+        .collect();
+
+    let selected_pos = app.selected_station.selected().unwrap_or(0) + 1;
+    let total_stations = app.stations.len();
+    let stations_list = List::new(station_items)
+        .block(
+            Block::bordered()
+                .title(Line::from(t("stations")))
+                .title(Line::from("[↓↑]").right_aligned())
+                .title_bottom(
+                    Line::from(format!("[{} / {}]", selected_pos, total_stations))
+                        .right_aligned(),
+                )
+                .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
+        )
+        .repeat_highlight_symbol(true)
+        .highlight_style(Style::default().bg(Color::Blue));
+
+    f.render_stateful_widget(stations_list, area, &mut app.selected_station);
+}
+
+/// Render the "Now Playing" section (top-right panel)
+fn render_now_playing(f: &mut ratatui::Frame, app: &App, area: Rect) {
     let now_playing = if let Some(index) = app.selected_station.selected() {
         if let Some(station) = app.stations.get(index) {
             Paragraph::new(vec![
@@ -297,9 +282,11 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
             )
             .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
     );
-    f.render_widget(now_playing, right_chunks[0]);
+    f.render_widget(now_playing, area);
+}
 
-    // History
+/// Render the history log (bottom-right panel)
+fn render_history(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
     let history_items: Vec<ListItem> = app
         .history
         .iter()
@@ -312,7 +299,7 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 )
         })
         .map(|msg| {
-            let width = right_chunks[1].width as usize;
+            let width = area.width as usize;
             let style = match msg.message_type {
                 MessageType::Error => Style::default().fg(Color::Red),
                 MessageType::Info => Style::default().fg(Color::White),
@@ -322,7 +309,6 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
             };
 
             // Format timestamp and message as separate columns
-            // Use reference to avoid cloning timestamp in hot render path
             let timestamp_span = Span::styled(&msg.timestamp, style);
 
             // Wrap just the message part
@@ -406,153 +392,175 @@ pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
                 .add_modifier(ratatui::style::Modifier::ITALIC)
                 .add_modifier(ratatui::style::Modifier::UNDERLINED),
         );
-    f.render_stateful_widget(history_list, right_chunks[1], &mut app.history_scroll_state);
+    f.render_stateful_widget(history_list, area, &mut app.history_scroll_state);
+}
 
-    if app.show_help {
-        let help_text = vec![
-            Line::from(vec![Span::styled(
-                format!("{} - {}", env!("CARGO_PKG_NAME"), t("app-description")),
+/// Render the help popup overlay
+fn render_help_popup(f: &mut ratatui::Frame, area: Rect) {
+    let help_text = build_help_text();
+    let popup_area = crate::ui::popup_area(area, 60, 60);
+    let help_widget = Paragraph::new(help_text)
+        .block(
+            Block::default()
+                .title(t("help-title"))
+                .title_bottom(
+                    Line::from(format!(
+                        "{} v{}",
+                        env!("CARGO_PKG_NAME"),
+                        env!("CARGO_PKG_VERSION")
+                    ))
+                    .right_aligned(),
+                )
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Double)
+                .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
+        )
+        .alignment(ratatui::layout::Alignment::Left)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
+    f.render_widget(ratatui::widgets::Clear, popup_area);
+    f.render_widget(help_widget, popup_area);
+}
+
+/// Build the help text content
+fn build_help_text() -> Vec<Line<'static>> {
+    vec![
+        Line::from(vec![Span::styled(
+            format!("{} - {}", env!("CARGO_PKG_NAME"), t("app-description")),
+            Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+        )]),
+        Line::from(""),
+        Line::from(t("help-keyboard")),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "↵ (Enter)",
                 Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-            )]),
-            Line::from(""),
-            Line::from(t("help-keyboard")),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "↵ (Enter)",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-enter"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "Space",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(
-                    " - {} ({}/{})",
-                    t("help-space"),
-                    t("controls-pause"),
-                    t("controls-stop")
-                )),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "+/-",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-volume"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "↑/↓",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-arrows"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "q",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-quit"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "?",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-toggle-help"))),
-            ]),
-            Line::from(""),
-            Line::from(t("help-cli")),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "--log-level <1|2>",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-log-level"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "--station <ID>",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-station"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "--listen",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-listen"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "--port <NUM>",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-port"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "--help",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-show-help"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "--version",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-version"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "--broadcast <MSG>",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-broadcast"))),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "--locale <LOCALE>",
-                    Style::default().add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::raw(format!(" - {}", t("help-locale"))),
-            ]),
-            Line::from(""),
-            Line::from(t("help-close")),
-        ];
+            ),
+            Span::raw(format!(" - {}", t("help-enter"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Space",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(
+                " - {} ({}/{})",
+                t("help-space"),
+                t("controls-pause"),
+                t("controls-stop")
+            )),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "+/-",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-volume"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "↑/↓",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-arrows"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "q",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-quit"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "?",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-toggle-help"))),
+        ]),
+        Line::from(""),
+        Line::from(t("help-cli")),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "--log-level <1|2>",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-log-level"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "--station <ID>",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-station"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "--listen",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-listen"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "--port <NUM>",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-port"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "--help",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-show-help"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "--version",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-version"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "--broadcast <MSG>",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-broadcast"))),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "--locale <LOCALE>",
+                Style::default().add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(format!(" - {}", t("help-locale"))),
+        ]),
+        Line::from(""),
+        Line::from(t("help-close")),
+    ]
+}
 
-        let area = crate::ui::popup_area(f.area(), 60, 60);
-        let help_widget = Paragraph::new(help_text)
-            .block(
-                Block::default()
-                    .title(t("help-title"))
-                    .title_bottom(
-                        Line::from(format!(
-                            "{} v{}",
-                            env!("CARGO_PKG_NAME"),
-                            env!("CARGO_PKG_VERSION")
-                        ))
-                        .right_aligned(),
-                    )
-                    .borders(Borders::ALL)
-                    .border_type(ratatui::widgets::BorderType::Double)
-                    .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
-            )
-            .alignment(ratatui::layout::Alignment::Left)
-            .wrap(ratatui::widgets::Wrap { trim: true });
+/// Main UI rendering function
+pub fn ui(f: &mut ratatui::Frame, app: &mut App) {
+    // Calculate layout
+    let layout = calculate_layout(f.area());
 
-        f.render_widget(ratatui::widgets::Clear, area);
-        f.render_widget(help_widget, area);
+    // Render each section
+    render_bottom_controls(f, app, layout.bottom_controls);
+    render_station_list(f, app, layout.left_panel);
+    render_now_playing(f, app, layout.right_top);
+    render_history(f, app, layout.right_bottom);
+
+    // Render help popup if enabled
+    if app.show_help {
+        render_help_popup(f, f.area());
     }
 }
 
-/// helper function to create a centered rect using up certain percentage of the available rect `r`
+/// Helper function to create a centered rect using up certain percentage of the available rect
 pub fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
     let vertical =
         Layout::vertical([Constraint::Percentage(percent_y)]).flex(ratatui::layout::Flex::Center);
