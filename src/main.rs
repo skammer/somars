@@ -34,6 +34,7 @@ mod config;
 mod ui;
 mod utils;
 mod audio_monitor;
+mod audio;
 use control::ControlCommand;
 use i18n::t;
 
