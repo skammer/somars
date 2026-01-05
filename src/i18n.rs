@@ -44,7 +44,8 @@ pub fn init(preferred_locale: Option<String>) {
     
     // Update the current locale
     {
-        let mut current_locale = CURRENT_LOCALE.write().unwrap();
+        let mut current_locale = CURRENT_LOCALE.write()
+            .expect("Locale lock poisoned: another thread panicked while holding the write lock. This is a bug.");
         *current_locale = locale_to_use;
     }
     
@@ -100,7 +101,9 @@ fn detect_locale_from_environment() -> String {
 
 // Get translation for a key
 pub fn get_message(key: &str) -> String {
-    let current_locale = CURRENT_LOCALE.read().unwrap().clone();
+    let current_locale = CURRENT_LOCALE.read()
+        .expect("Locale lock poisoned: another thread panicked while holding the read lock. This is a bug.")
+        .clone();
     
     let result = BUNDLES.with(|bundles| {
         let bundles = bundles.borrow();

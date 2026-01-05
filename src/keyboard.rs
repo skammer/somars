@@ -212,13 +212,16 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
 
                     // buffer 5 seconds of audio
                     // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
-                    let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 5;
+                    // Default to 128 kbit/s if bitrate not available in ICY headers
+                    let bitrate = icy_headers.bitrate().unwrap_or(128);
+                    let prefetch_bytes = bitrate / 8 * 1024 * 5;
 
                     let reader = match stream_download::StreamDownload::from_stream(
                         stream,
                         stream_download::storage::bounded::BoundedStorageProvider::new(
                             stream_download::storage::memory::MemoryStorageProvider,
-                            std::num::NonZeroUsize::new(1024 * 1024).unwrap(),
+                            std::num::NonZeroUsize::new(1024 * 1024)
+                                .expect("1024 * 1024 is guaranteed to be non-zero"),
                         ),
                         stream_download::Settings::default().prefetch_bytes(prefetch_bytes as u64),
                     )
@@ -233,7 +236,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
                         }
                     };
 
-                    add_log(t("bit-rate").replace("{$rate}", &format!("{:?}", icy_headers.bitrate().unwrap())), MessageType::System).await;
+                    add_log(t("bit-rate").replace("{$rate}", &format!("{:?}", bitrate)), MessageType::System).await;
 
                     // Start new playback
                     let playback_success = match reader {
@@ -280,12 +283,26 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
 
                             // Start playback with the new decoder
                             if let Ok(audio_decoder) = decoder_result {
-                                {
-                                    let locked_sink = sink.lock().unwrap();
-                                    locked_sink.append(audio_decoder);
-                                    locked_sink.set_volume(volume);
-                                    locked_sink.play();
+                                // Scope to ensure MutexGuard is dropped before any await
+                                let sink_op_result = {
+                                    let lock_result = sink.lock();
+                                    match lock_result {
+                                        Ok(locked_sink) => {
+                                            locked_sink.append(audio_decoder);
+                                            locked_sink.set_volume(volume);
+                                            locked_sink.play();
+                                            Ok(())
+                                        }
+                                        Err(_) => Err("Failed to lock audio sink (mutex poisoned)"),
+                                    }
+                                };
+
+                                // Handle any lock errors (now outside the lock scope)
+                                if let Err(e) = sink_op_result {
+                                    add_log(e.to_string(), MessageType::Error).await;
+                                    return Ok(());
                                 }
+
                                 true
                             } else {
                                 let _ = add_log(t("failed-decoder-construction"), MessageType::Error).await;

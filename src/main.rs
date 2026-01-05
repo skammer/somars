@@ -460,8 +460,10 @@ pub enum PlaybackState {
 
      // Cleanup terminal and audio
      if let Some(sink) = app.sink {
-         let sink = sink.lock().unwrap();
-         sink.stop();
+         match sink.lock() {
+            Ok(sink) => sink.stop(),
+            Err(e) => eprintln!("Warning: Failed to stop audio sink (mutex poisoned): {}", e),
+        }
      }
 
      disable_raw_mode()?;
