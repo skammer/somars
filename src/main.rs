@@ -60,6 +60,8 @@ pub struct HistoryMessage {
 /// Helper function to add a history message to the app with automatic cleanup
 fn add_history_message(app: &mut App, message: HistoryMessage) {
     app.history.push_back(message);
+    // Invalidate wrapped text cache when history changes
+    app.history_cache_valid = false;
     // Remove oldest entries if we exceed capacity
     while app.history.len() > app.history_capacity {
         app.history.pop_front();
@@ -132,6 +134,12 @@ pub struct App {
     pub playback_start_time_for_underrun: Option<std::time::Instant>,
     pub last_restart_time: Option<std::time::Instant>,
     pub restart_attempts: u32,
+    /// Cache for wrapped history text to avoid recomputing on every frame
+    pub wrapped_history_cache: std::collections::HashMap<usize, Vec<String>>,
+    /// Whether the wrapped history cache is valid
+    pub history_cache_valid: bool,
+    /// Last known width for cache invalidation
+    pub last_cache_width: u16,
 }
 
 #[derive(Clone)]
@@ -278,6 +286,9 @@ pub enum PlaybackState {
          playback_start_time_for_underrun: None,
          last_restart_time: None,
          restart_attempts: 0,
+         wrapped_history_cache: std::collections::HashMap::new(),
+         history_cache_valid: false,
+         last_cache_width: 0,
      };
      
      // Store the station ID to auto-play

@@ -287,19 +287,41 @@ fn render_now_playing(f: &mut ratatui::Frame, app: &App, area: Rect) {
 
 /// Render the history log (bottom-right panel)
 fn render_history(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
+    let width = area.width as usize;
+
+    // Invalidate cache if width changed
+    if app.last_cache_width != area.width {
+        app.history_cache_valid = false;
+        app.last_cache_width = area.width;
+    }
+
+    // Recpute wrapped text if cache is invalid
+    if !app.history_cache_valid {
+        app.wrapped_history_cache.clear();
+        for (idx, msg) in app.history.iter().enumerate() {
+            let message_width = width.saturating_sub(10); // Timestamp width + separator
+            let wrapped: Vec<String> = textwrap::wrap(&msg.message, message_width)
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect();
+            app.wrapped_history_cache.insert(idx, wrapped);
+        }
+        app.history_cache_valid = true;
+    }
+
     let history_items: Vec<ListItem> = app
         .history
         .iter()
+        .enumerate()
         .rev()
-        .filter(|msg| {
+        .filter(|(_, msg)| {
             app.log_level > 1
                 || matches!(
                     msg.message_type,
                     MessageType::Error | MessageType::Info | MessageType::Playback
                 )
         })
-        .map(|msg| {
-            let width = area.width as usize;
+        .map(|(idx, msg)| {
             let style = match msg.message_type {
                 MessageType::Error => Style::default().fg(Color::Red),
                 MessageType::Info => Style::default().fg(Color::White),
@@ -311,12 +333,10 @@ fn render_history(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
             // Format timestamp and message as separate columns
             let timestamp_span = Span::styled(&msg.timestamp, style);
 
-            // Wrap just the message part
-            let message_width = width.saturating_sub(10); // Timestamp width + separator
-            let wrapped_lines: Vec<String> = textwrap::wrap(&msg.message, message_width)
-                .into_iter()
-                .map(|s| s.to_string())
-                .collect();
+            // Get wrapped text from cache
+            let wrapped_lines = app.wrapped_history_cache.get(&idx)
+                .cloned()
+                .unwrap_or_default();
 
             // Create lines with proper alignment
             let mut lines = Vec::new();
