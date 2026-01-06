@@ -114,6 +114,17 @@ impl Config {
         Self::load_from_path(None)
     }
 
+    /// Load configuration, falling back to defaults on error
+    ///
+    /// This is a convenience method that always returns a valid config,
+    /// using defaults if loading fails. Errors are printed to stderr.
+    pub fn load_or_default() -> Self {
+        Self::load().unwrap_or_else(|e| {
+            eprintln!("Config load failed: {}. Using defaults.", e);
+            Self::default()
+        })
+    }
+
     /// Load configuration from a specific path or default
     ///
     /// If `path` is None, uses the default config path.

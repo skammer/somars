@@ -171,17 +171,22 @@ pub enum PlaybackState {
          }
      }
 
-     // Load configuration with proper error handling
-     let config = match config::Config::load_from_path(cli.config.clone()) {
-         Ok(c) => c,
-         Err(e) => {
-             // Provide helpful error message for config loading failures
-             warn!("Failed to load configuration: {}", e);
+     // Load configuration using the simplified method
+     let mut config = if let Some(path) = cli.config.clone() {
+         config::Config::load_from_path(Some(path.clone())).unwrap_or_else(|e| {
+             warn!("Failed to load configuration from {}: {}", path, e);
              eprintln!("Warning: Failed to load configuration: {}", e);
-             eprintln!("Using default configuration. Run without --config to use default path, or fix the specified file.");
+             eprintln!("Using default configuration.");
              config::Config::default()
-         }
+         })
+     } else {
+         config::Config::load_or_default()
      };
+
+     // Apply CLI overrides
+     if let Some(log_level) = cli.log_level {
+         config.log_level = log_level;
+     }
      let config_file_path = cli.config.clone();
 
      // Initialize i18n
@@ -480,14 +485,7 @@ pub enum PlaybackState {
 
          if app.should_quit {
              // Save configuration before quitting
-             let mut config = match config::Config::load() {
-                 Ok(c) => c,
-                 Err(e) => {
-                     eprintln!("Warning: Failed to load config for saving: {}", e);
-                     eprintln!("Creating new configuration file.");
-                     config::Config::default()
-                 }
-             };
+             let mut config = config::Config::load_or_default();
              config.volume = app.volume;
              config.log_level = app.log_level;
              config.udp_port = udp_port;
