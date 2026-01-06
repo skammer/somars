@@ -161,7 +161,7 @@ impl Component for StationList {
         } else {
             // Calculate how many items can be displayed in the available area
             // Account for borders and padding (top border + bottom border + title + bottom text)
-            let available_height = area.height.saturating_sub(3) as usize; // Account for borders and title/bottom text
+            let available_height = area.height.saturating_sub(2) as usize; // Account for top border, title, bottom border, and bottom text
 
             // Adjust scroll offset to keep selected item visible
             if self.selected_index < self.scroll_offset {
