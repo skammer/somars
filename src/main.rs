@@ -1,4 +1,5 @@
 use clap::Parser;
+use tracing::{info, warn, error, debug};
 
 use crossterm::{
     event::{self, Event},
@@ -35,6 +36,7 @@ mod ui;
 mod utils;
 mod audio_monitor;
 mod audio;
+mod logging;
 use control::ControlCommand;
 use i18n::t;
 
@@ -141,6 +143,9 @@ pub enum PlaybackState {
 
  #[tokio::main]
  async fn main() -> Result<(), error::AppError> {
+     // Initialize logging early (before other operations)
+     logging::init_logging();
+
      let cli = Cli::parse();
 
      // Handle print config path mode
@@ -152,6 +157,7 @@ pub enum PlaybackState {
              }
              Err(e) => {
                  eprintln!("Error: {}", e);
+                 error!("Failed to get config path: {}", e);
                  return Err(error::AppError::Config(e.to_string()));
              }
          }
@@ -162,6 +168,7 @@ pub enum PlaybackState {
          Ok(c) => c,
          Err(e) => {
              // Provide helpful error message for config loading failures
+             warn!("Failed to load configuration: {}", e);
              eprintln!("Warning: Failed to load configuration: {}", e);
              eprintln!("Using default configuration. Run without --config to use default path, or fix the specified file.");
              config::Config::default()
@@ -222,6 +229,7 @@ pub enum PlaybackState {
 
          tokio::spawn(async move {
              if let Err(e) = handle_udp_commands(port, command_tx).await {
+                 error!("UDP listener error: {}", e);
                  eprintln!("UDP listener error: {}", e);
                  // Add error logging here too
                  let _ = log_tx.send(HistoryMessage {
@@ -231,6 +239,7 @@ pub enum PlaybackState {
                  }).await;
              }
          });
+         info!("UDP listener started on port {}", port);
      }
 
      let mut selected_station = ListState::default();
@@ -487,10 +496,12 @@ pub enum PlaybackState {
              };
 
              if let Err(e) = save_result {
+                 warn!("Failed to save configuration: {}", e);
                  eprintln!("Warning: Failed to save configuration: {}", e);
                  eprintln!("Your settings will not be persisted.");
              }
 
+             info!("Application shutdown requested");
              break;
          }
      }
@@ -499,7 +510,10 @@ pub enum PlaybackState {
      if let Some(sink) = app.sink {
          match sink.lock() {
             Ok(sink) => sink.stop(),
-            Err(e) => eprintln!("Warning: Failed to stop audio sink (mutex poisoned): {}", e),
+            Err(e) => {
+                warn!("Failed to stop audio sink (mutex poisoned): {}", e);
+                eprintln!("Warning: Failed to stop audio sink (mutex poisoned): {}", e);
+            }
         }
      }
 

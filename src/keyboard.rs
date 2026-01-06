@@ -3,6 +3,7 @@ use crate::audio;
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc::Sender;
 use std::time::Instant;
+use tracing::{info, warn, error, debug};
 
 /// Parse a key event and return the corresponding command if applicable
 pub fn parse_key_event(key: KeyCode) -> Option<ControlCommand> {
@@ -135,8 +136,10 @@ pub fn execute_command(
 }
 
 pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
+    debug!("handle_play called");
     if let Some(index) = app.selected_station.selected() {
         if let Some(station) = app.stations.get(index).cloned() {
+            info!(station_id = %station.id, station_title = %station.title, "Starting playback");
             if let Some(original_sink) = &app.sink {
                 app.active_station = Some(index);
                 let current_time = std::time::Instant::now();
@@ -226,6 +229,7 @@ pub fn handle_play(app: &mut App, log_tx: &Sender<HistoryMessage>) {
 }
 
 pub fn handle_stop(app: &mut App) {
+    debug!("handle_stop called");
     if let Some(sink) = &app.sink {
         if let Ok(sink) = sink.lock() {
             match app.playback_state {
@@ -257,6 +261,7 @@ pub fn handle_stop(app: &mut App) {
 }
 
 pub fn handle_pause(app: &mut App) {
+    debug!("handle_pause called");
     if let Some(sink) = &app.sink {
         if let Ok(sink) = sink.lock() {
             match app.playback_state {
@@ -281,6 +286,7 @@ pub fn handle_pause(app: &mut App) {
 }
 
 pub fn handle_resume(app: &mut App, log_tx: &Sender<HistoryMessage>) {
+    debug!("handle_resume called");
     // First, check if we need to fallback to handle_play
     let needs_fallback = match app.playback_state {
         PlaybackState::Paused => false,
