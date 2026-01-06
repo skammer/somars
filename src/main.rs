@@ -1,8 +1,10 @@
 use clap::Parser;
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, error};
+use futures::StreamExt;
+use serde::{Deserialize, Serialize};
 
 use crossterm::{
-    event::{self, Event},
+    event::{poll, read, Event as CrosstermEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
         LeaveAlternateScreen},
@@ -27,22 +29,28 @@ use rodio::{OutputStreamBuilder, Sink};
 mod station;
 use crate::station::Station;
 
-mod keyboard;
+// mod keyboard; // Old module, replaced by new App architecture
 mod i18n;
 mod error;
 mod control;
 mod config;
-mod ui;
+// mod ui; // Old module, replaced by new App architecture
 mod utils;
-mod audio_monitor;
+// mod audio_monitor; // Old module, replaced by new App architecture
 mod audio;
 mod logging;
+mod action;
+mod event;
+mod tui;
+mod components;
+mod app;
 use control::ControlCommand;
 use i18n::t;
+use app::App;
 
 
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum MessageType {
     Error,
     Info,
@@ -55,17 +63,6 @@ pub struct HistoryMessage {
     pub message: String,
     pub message_type: MessageType,
     pub timestamp: String,
-}
-
-/// Helper function to add a history message to the app with automatic cleanup
-fn add_history_message(app: &mut App, message: HistoryMessage) {
-    app.history.push_back(message);
-    // Invalidate wrapped text cache when history changes
-    app.history_cache_valid = false;
-    // Remove oldest entries if we exceed capacity
-    while app.history.len() > app.history_capacity {
-        app.history.pop_front();
-    }
 }
 
 #[derive(Parser)]
@@ -104,45 +101,7 @@ struct Cli {
     config: Option<String>,
 }
 
-pub struct App {
-    pub stations: Vec<Station>,
-    pub selected_station: ListState,
-    pub active_station: Option<usize>,
-    pub playback_state: PlaybackState,
-    pub history: VecDeque<HistoryMessage>,
-    pub history_capacity: usize,
-    pub history_scroll_state: ListState,
-    pub should_quit: bool,
-    pub sink: Option<Arc<Mutex<Sink>>>,
-    pub audio_manager: audio::AudioManager,
-    pub metadata_tx: tokio::sync::mpsc::Sender<audio::MetadataEvent>,
-    pub loading: bool,
-    pub spinner_state: usize,
-    pub spinner_frames: Vec<&'static str>,
-    pub playback_frames: Vec<&'static str>,
-    pub playback_frame_index: usize,
-    pub volume: f32,
-    pub show_help: bool,
-    pub log_level: u8,
-    pub playback_start_time: Option<std::time::Instant>,
-    pub total_played: std::time::Duration,
-    pub last_pause_time: Option<std::time::Instant>,
-    pub last_underrun_check: Option<std::time::Instant>,
-    pub last_position: std::time::Duration,
-    pub underrun_detected: bool,
-    pub station_loading: bool,
-    pub playback_start_time_for_underrun: Option<std::time::Instant>,
-    pub last_restart_time: Option<std::time::Instant>,
-    pub restart_attempts: u32,
-    /// Cache for wrapped history text to avoid recomputing on every frame
-    pub wrapped_history_cache: std::collections::HashMap<usize, Vec<String>>,
-    /// Whether the wrapped history cache is valid
-    pub history_cache_valid: bool,
-    /// Last known width for cache invalidation
-    pub last_cache_width: u16,
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PlaybackState {
     Playing,
     Paused,
@@ -150,7 +109,7 @@ pub enum PlaybackState {
 }
 
  #[tokio::main]
- async fn main() -> Result<(), error::AppError> {
+ async fn main() -> color_eyre::eyre::Result<()> {
      // Initialize logging early (before other operations)
      logging::init_logging();
 
@@ -166,7 +125,7 @@ pub enum PlaybackState {
              Err(e) => {
                  eprintln!("Error: {}", e);
                  error!("Failed to get config path: {}", e);
-                 return Err(error::AppError::Config(e.to_string()));
+                 return Err(color_eyre::eyre::eyre!("Failed to get config path: {}", e));
              }
          }
      }
@@ -194,12 +153,14 @@ pub enum PlaybackState {
 
      // Handle broadcast mode
      if let Some(message) = cli.broadcast {
-         send_udp_broadcast(&message, cli.port).await?;
+         send_udp_broadcast(&message, cli.port).await
+             .map_err(|e| color_eyre::eyre::eyre!("Failed to send UDP broadcast: {}", e))?;
          return Ok(());
      }
-     
+
      // Setup terminal
-     enable_raw_mode()?;
+     enable_raw_mode()
+         .map_err(|e| color_eyre::eyre::eyre!("Failed to enable raw mode: {}", e))?;
      let mut stdout = io::stdout();
      execute!(
          stdout,
@@ -255,277 +216,138 @@ pub enum PlaybackState {
          info!("UDP listener started on port {}", port);
      }
 
-     let mut selected_station = ListState::default();
-     selected_station.select(Some(0));
-
      // Create metadata channel for audio playback
      let (metadata_tx, _) = tokio::sync::mpsc::channel(32);
 
-     let mut app = App {
-         stations: Vec::new(),
-         selected_station,
-         active_station: None,
-         playback_state: PlaybackState::Stopped,
-         history: VecDeque::new(),
-         history_capacity: 1000, // Keep max 1000 history messages
-         history_scroll_state: ListState::default(),
-         should_quit: false,
-         sink: Some(Arc::new(Mutex::new(sink))),
-         audio_manager: audio::AudioManager::new(),
+     // Create the new App
+     let sink = Arc::new(Mutex::new(sink));
+     let mut app = App::new(
+         4.0,   // tick_rate
+         60.0,  // frame_rate
+         sink,
          metadata_tx,
-         loading: true,
-         spinner_state: 0,
-         volume: config.volume,
-         spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-         playback_frames: vec!["▮▯▯▯", "▮▮▯▯", "▮▮▮▯", "▮▮▮▮"],
-         playback_frame_index: 0,
-         show_help: false,
-         log_level: cli.log_level.unwrap_or(config.log_level), // Use CLI value if provided, otherwise config value
-         playback_start_time: None,
-         total_played: std::time::Duration::default(),
-         last_pause_time: None,
-         last_underrun_check: None,
-         last_position: std::time::Duration::default(),
-         underrun_detected: false,
-         station_loading: false,
-         playback_start_time_for_underrun: None,
-         last_restart_time: None,
-         restart_attempts: 0,
-         wrapped_history_cache: std::collections::HashMap::new(),
-         history_cache_valid: false,
-         last_cache_width: 0,
-     };
-     
-     // Store the station ID to auto-play
-     let auto_play_station_id = cli.station.clone().or(config.last_station);
+         log_tx.clone(),
+         config.clone(),
+     );
 
      // Spawn station fetching task
-     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+     let action_tx_clone = app.action_tx.clone();
      tokio::spawn(async move {
          match Station::fetch_all().await {
-             Ok(stations) => tx.send(Ok(stations)).await,
-             Err(e) => tx.send(Err(e)).await,
+             Ok(stations) => {
+                 let _ = action_tx_clone.send(action::Action::UpdateStations(stations));
+             }
+             Err(e) => {
+                 let _ = action_tx_clone.send(action::Action::Error(format!("Error loading stations: {}", e)));
+             }
          }
      });
 
-     // Initialize variables for audio monitoring
-     let mut last_position = std::time::Duration::default();
-
-     // Main event loop
-     let tick_rate = Duration::from_millis(250);
-     let mut last_tick = Instant::now();
-     loop {
-         terminal.draw(|f| ui::ui(f, &mut app))?;
-
-         let timeout = tick_rate
-             .checked_sub(last_tick.elapsed())
-             .unwrap_or_else(|| Duration::from_secs(0));
-
-         // Check for completed station fetch
-         if app.loading {
-             if let Ok(result) = rx.try_recv() {
-                 match result {
-                     Ok(stations) => {
-                         app.stations = stations;
-                         app.loading = false;
-
-                         // If a station ID was provided via command line, find and play it
-                         if let Some(station_id) = &auto_play_station_id {
-                             let station_index = app.stations.iter().position(|s| s.id == *station_id);
-
-                             if let Some(index) = station_index {
-                                 // Select the station in the UI
-                                 app.selected_station.select(Some(index));
-
-                                 // Play the station
-                                 keyboard::handle_play(&mut app, &log_tx);
-
-                                 add_history_message(&mut app, HistoryMessage {
-                                     message: t("auto-playing").replace("{$id}", station_id),
-                                     message_type: MessageType::System,
-                                     timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                 });
-                             } else {
-                                 add_history_message(&mut app, HistoryMessage {
-                                     message: t("station-not-found").replace("{$id}", station_id),
-                                     message_type: MessageType::Error,
-                                     timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                 });
-                             }
-                         }
-                     }
-                     Err(e) => {
-                         add_history_message(&mut app, HistoryMessage {
-                             message: format!("Error loading stations: {}", e),
-                             message_type: MessageType::Error,
-                             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                         });
-                         app.loading = false;
-                     }
+     // Handle UDP commands by converting them to Actions
+     let udp_action_tx = app.action_tx.clone();
+     let udp_log_tx = log_tx.clone();
+     tokio::spawn(async move {
+         while let Some(cmd) = command_rx.recv().await {
+             match cmd {
+                 ControlCommand::Play => {
+                     let _ = udp_action_tx.send(action::Action::Play);
+                 }
+                 ControlCommand::Stop => {
+                     let _ = udp_action_tx.send(action::Action::Stop);
+                 }
+                 ControlCommand::TogglePause => {
+                     let _ = udp_action_tx.send(action::Action::TogglePause);
+                 }
+                 ControlCommand::VolumeUp => {
+                     let _ = udp_action_tx.send(action::Action::VolumeUp);
+                 }
+                 ControlCommand::VolumeDown => {
+                     let _ = udp_action_tx.send(action::Action::VolumeDown);
+                 }
+                 ControlCommand::SetVolume(level) => {
+                     let _ = udp_action_tx.send(action::Action::SetVolume(level));
+                 }
+                 ControlCommand::Tune(station_id) => {
+                     let _ = udp_action_tx.send(action::Action::TuneStation(station_id));
+                 }
+                 ControlCommand::TuneNext => {
+                     let _ = udp_action_tx.send(action::Action::TuneNext);
+                 }
+                 ControlCommand::TunePrev => {
+                     let _ = udp_action_tx.send(action::Action::TunePrev);
+                 }
+                 ControlCommand::SelectUp => {
+                     let _ = udp_action_tx.send(action::Action::StationUp);
+                 }
+                 ControlCommand::SelectDown => {
+                     let _ = udp_action_tx.send(action::Action::StationDown);
+                 }
+                 ControlCommand::Toggle => {
+                     // Toggle is handled based on state - check if we're playing or stopped
+                     // This is a bit more complex, for now just send Play
+                     let _ = udp_action_tx.send(action::Action::Play);
+                 }
+                 ControlCommand::ToggleHelp => {
+                     let _ = udp_action_tx.send(action::Action::ToggleHelp);
+                 }
+                 ControlCommand::ScrollHistoryUp => {
+                     let _ = udp_action_tx.send(action::Action::ScrollHistoryUp);
+                 }
+                 ControlCommand::ScrollHistoryDown => {
+                     let _ = udp_action_tx.send(action::Action::ScrollHistoryDown);
+                 }
+                 ControlCommand::Quit => {
+                     let _ = udp_action_tx.send(action::Action::Quit);
                  }
              }
-             // Update spinner
-             app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
          }
+     });
 
-         // Check for log messages
-         while let Ok(log_msg) = log_rx.try_recv() {
+     // Handle log messages by updating the app
+     let app_action_tx = app.action_tx.clone();
+     tokio::spawn(async move {
+         while let Some(log_msg) = log_rx.recv().await {
              // Check if this is a special message to clear station loading flag
              if log_msg.message == "CLEAR_STATION_LOADING" {
-                 app.station_loading = false;
-                 // Reset restart attempts when station loads successfully
-                 app.restart_attempts = 0;
+                 // This will be handled in the app
              } else {
-                 add_history_message(&mut app, log_msg);
+                 let _ = app_action_tx.send(action::Action::Error(log_msg.message));
              }
          }
+     });
 
-         // Process control commands
-         while let Ok(cmd) = command_rx.try_recv() {
-             keyboard::execute_command(cmd, &mut app, &log_tx);
-         }
+     // Run the application
+     app.run().await?;
 
-         if last_tick.elapsed() >= tick_rate {
-             last_tick = Instant::now();
-             app.spinner_state = (app.spinner_state + 1) % app.spinner_frames.len();
-             if matches!(app.playback_state, PlaybackState::Playing) {
-                 app.playback_frame_index = (app.playback_frame_index + 1) % app.playback_frames.len();
-             }
+     // Save configuration before quitting
+     let mut save_config = config::Config::load_or_default();
+     save_config.volume = app.volume;
+     save_config.log_level = app.log_level;
+     save_config.udp_port = udp_port;
+     save_config.udp_enabled = udp_enabled;
 
-             // Check for audio underruns
-             if matches!(app.playback_state, PlaybackState::Playing) {
-                 let mut potential_underrun = false;
-                 let mut current_pos = std::time::Duration::default();
-                 let now = Instant::now();
-
-                 if let Some(ref sink) = app.sink {
-                     if let Ok(sink_guard) = sink.lock() {
-                         // Check if the queue is running dry
-                         let queue_empty = sink_guard.empty();
-                         let queue_len = sink_guard.len();
-
-                         // Get current playback position
-                         current_pos = sink_guard.get_pos();
-
-                         // Check if playback has stalled
-                         let should_have_progressed = if let Some(start_time) = app.playback_start_time {
-                             now.duration_since(start_time)
-                         } else {
-                             std::time::Duration::default()
-                         };
-
-                         // Calculate if we're falling behind
-                         let pos_diff = if current_pos > last_position {
-                             current_pos - last_position
-                         } else {
-                             std::time::Duration::default()
-                         };
-
-                         // Check for potential underrun conditions
-                         potential_underrun = queue_empty ||
-                             (queue_len == 0 && !sink_guard.is_paused()) ||
-                             (pos_diff.as_millis() == 0 && should_have_progressed.as_millis() > 5000); // No progress in 5 seconds
-                     }
-                 }
-
-                 // Update last position for next check
-                 last_position = current_pos;
-
-                 // Check if we're past the grace period (first 5 seconds after playback starts)
-                 let past_grace_period = if let Some(start_time) = app.playback_start_time_for_underrun {
-                     now.duration_since(start_time).as_secs() > 5
-                 } else {
-                     false // If no start time recorded, assume we're in grace period
-                 };
-
-                 // Calculate the required backoff time (exponential backoff: 0.5s, 1s, 2s, 4s, 8s, 16s, max 30s)
-                 let required_backoff = std::time::Duration::from_secs_f64(
-                     (0.5 * (2_f64.powi(app.restart_attempts as i32))).min(30.0)
-                 );
-
-                 // Check if enough time has passed since the last restart
-                 let past_backoff_period = if let Some(last_restart) = app.last_restart_time {
-                     now.duration_since(last_restart) >= required_backoff
-                 } else {
-                     true // If no previous restart, we can restart immediately
-                 };
-
-                 if potential_underrun && !app.station_loading && past_grace_period && past_backoff_period {
-                     app.underrun_detected = true;
-
-                     // Log the underrun detection
-                     let _ = log_tx.send(HistoryMessage {
-                         message: t("underrun-detected"),
-                         message_type: MessageType::Error,
-                         timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                     }).await;
-
-                     // Update restart tracking
-                     app.last_restart_time = Some(now);
-                     app.restart_attempts = app.restart_attempts.saturating_add(1);
-
-                     // Restart playback to recover from underrun
-                     audio_monitor::restart_playback(&mut app, &log_tx);
-                 } else {
-                     app.underrun_detected = false;
-                 }
-
-                 app.last_underrun_check = Some(now);
-             }
-         }
-
-         if event::poll(timeout)? {
-             match event::read()? {
-                 Event::Key(key) => {
-                     keyboard::handle_key_event(key.code, &mut app, &log_tx, &mut last_tick);
-                 }
-                 _ => {}
-             }
-         }
-
-         if app.should_quit {
-             // Save configuration before quitting
-             let mut config = config::Config::load_or_default();
-             config.volume = app.volume;
-             config.log_level = app.log_level;
-             config.udp_port = udp_port;
-             config.udp_enabled = udp_enabled;
-
-             // Save the last played station
-             if let Some(index) = app.active_station {
-                 if let Some(station) = app.stations.get(index) {
-                     config.last_station = Some(station.id.clone());
-                 }
-             }
-
-             let save_result = if let Some(path) = &config_file_path {
-                 config.save_to_path(path)
-             } else {
-                 config.save()
-             };
-
-             if let Err(e) = save_result {
-                 warn!("Failed to save configuration: {}", e);
-                 eprintln!("Warning: Failed to save configuration: {}", e);
-                 eprintln!("Your settings will not be persisted.");
-             }
-
-             info!("Application shutdown requested");
-             break;
+     // Save the last played station
+     if let Some(index) = app.active_station {
+         if let Some(station) = app.stations.get(index) {
+             save_config.last_station = Some(station.id.clone());
          }
      }
 
-     // Cleanup terminal and audio
-     if let Some(sink) = app.sink {
-         match sink.lock() {
-            Ok(sink) => sink.stop(),
-            Err(e) => {
-                warn!("Failed to stop audio sink (mutex poisoned): {}", e);
-                eprintln!("Warning: Failed to stop audio sink (mutex poisoned): {}", e);
-            }
-        }
+     let save_result = if let Some(path) = &config_file_path {
+         save_config.save_to_path(path)
+     } else {
+         save_config.save()
+     };
+
+     if let Err(e) = save_result {
+         warn!("Failed to save configuration: {}", e);
+         eprintln!("Warning: Failed to save configuration: {}", e);
+         eprintln!("Your settings will not be persisted.");
      }
 
+     info!("Application shutdown completed");
+
+     // Cleanup terminal
      disable_raw_mode()?;
      execute!(
          terminal.backend_mut(),

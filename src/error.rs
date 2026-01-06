@@ -1,5 +1,10 @@
+//! Error types for the somars application
+//!
+//! This module provides error handling with integration to color-eyre for rich error reporting.
+
 use thiserror::Error;
 
+/// Application-specific error type
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Network error: {0}")]
@@ -38,3 +43,16 @@ impl From<crate::config::ConfigError> for AppError {
         AppError::Config(err.to_string())
     }
 }
+
+/// Result type alias for backwards compatibility
+pub type AppResult<T> = std::result::Result<T, AppError>;
+
+// For new code using color-eyre
+// Use color_eyre::eyre::Result<T> directly or
+// use crate::error::Result<T> alias if we want to provide one
+
+// Example: When migrating to color-eyre in main.rs:
+// fn main() -> color_eyre::eyre::Result<()> {
+//     color_eyre::install()?;
+//     // ... rest of code
+// }

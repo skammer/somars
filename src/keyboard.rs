@@ -1,9 +1,9 @@
 use crate::{App, MessageType, PlaybackState, HistoryMessage, t, control::ControlCommand};
 use crate::audio;
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tokio::sync::mpsc::Sender;
 use std::time::Instant;
-use tracing::{info, warn, error, debug};
+use tracing::{info, debug};
 
 /// Parse a key event and return the corresponding command if applicable
 pub fn parse_key_event(key: KeyCode) -> Option<ControlCommand> {
@@ -24,12 +24,19 @@ pub fn parse_key_event(key: KeyCode) -> Option<ControlCommand> {
 
 /// Handle a key event by parsing it and executing the corresponding command
 pub fn handle_key_event(
-    key: KeyCode, 
-    app: &mut App, 
+    key: KeyEvent,
+    app: &mut App,
     log_tx: &Sender<HistoryMessage>,
     _last_tick: &mut Instant
 ) -> bool {
-    if let Some(command) = parse_key_event(key) {
+    // Handle Ctrl+C for graceful shutdown
+    if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        info!("Ctrl+C detected, initiating graceful shutdown");
+        app.should_quit = true;
+        return true;
+    }
+
+    if let Some(command) = parse_key_event(key.code) {
         execute_command(command, app, log_tx);
         true
     } else {

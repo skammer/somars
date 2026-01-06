@@ -1,0 +1,744 @@
+//! Main application struct
+//!
+//! The App manages the component collection, event loop, and application state.
+
+use crate::{
+    action::Action,
+    audio,
+    components::{Component, Help, History, StationList, NowPlaying, BottomControls},
+    config::Config,
+    event::Event,
+    station::Station,
+    tui::Tui,
+    MessageType, PlaybackState,
+};
+use color_eyre::eyre::Result;
+use crossterm::event::KeyEvent;
+use ratatui::{
+    layout::{Constraint, Direction, Layout as RatatuiLayout, Rect},
+    Frame,
+};
+use rodio::Sink;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tracing::{info, debug};
+
+/// History message type alias - use the one from main.rs
+pub type HistoryMessage = crate::HistoryMessage;
+
+/// Main application struct
+pub struct App {
+    // Components
+    components: Vec<Box<dyn Component>>,
+
+    // Shared state
+    pub config: Config,
+    pub stations: Vec<Station>,
+    pub active_station: Option<usize>,
+    pub selected_station: usize,
+
+    // Playback state
+    pub playback_state: PlaybackState,
+    pub volume: f32,
+
+    // Audio
+    pub audio_manager: audio::AudioManager,
+    pub sink: Option<Arc<Mutex<Sink>>>,
+    pub metadata_tx: mpsc::Sender<audio::MetadataEvent>,
+    pub log_tx: mpsc::Sender<HistoryMessage>,
+
+    // Playback timing
+    pub playback_start_time: Option<Instant>,
+    pub total_played: std::time::Duration,
+    pub last_pause_time: Option<Instant>,
+    pub playback_start_time_for_underrun: Option<Instant>,
+    pub last_position: std::time::Duration,
+    pub last_underrun_check: Option<Instant>,
+    pub last_restart_time: Option<Instant>,
+    pub restart_attempts: u32,
+    pub underrun_detected: bool,
+    pub station_loading: bool,
+
+    // Channels
+    pub action_tx: UnboundedSender<Action>,
+    action_rx: UnboundedReceiver<Action>,
+
+    // State
+    pub should_quit: bool,
+    pub loading: bool,
+
+    // UI state
+    pub history_messages: Vec<HistoryMessage>,
+    pub log_level: u8,
+
+    // UDP control state
+    pub udp_enabled: bool,
+    pub udp_port: u16,
+}
+
+impl App {
+    /// Create a new application instance
+    pub fn new(
+        tick_rate: f64,
+        frame_rate: f64,
+        sink: Arc<Mutex<Sink>>,
+        metadata_tx: mpsc::Sender<audio::MetadataEvent>,
+        log_tx: mpsc::Sender<HistoryMessage>,
+        config: Config,
+    ) -> Self {
+        let (action_tx, action_rx) = mpsc::unbounded_channel();
+
+        let log_level = config.log_level;
+        let volume = config.volume;
+        let udp_enabled = config.udp_enabled;
+        let udp_port = config.udp_port;
+
+        // Create components
+        let components: Vec<Box<dyn Component>> = vec![
+            Box::new(StationList::new()),
+            Box::new(NowPlaying::new()),
+            Box::new(History::new()),
+            Box::new(Help::new()),
+            Box::new(BottomControls::new()),
+        ];
+
+        Self {
+            components,
+            config,
+            stations: Vec::new(),
+            active_station: None,
+            selected_station: 0,
+            playback_state: PlaybackState::Stopped,
+            volume,
+            audio_manager: audio::AudioManager::new(),
+            sink: Some(sink),
+            metadata_tx,
+            log_tx,
+            playback_start_time: None,
+            total_played: std::time::Duration::default(),
+            last_pause_time: None,
+            playback_start_time_for_underrun: None,
+            last_position: std::time::Duration::default(),
+            last_underrun_check: None,
+            last_restart_time: None,
+            restart_attempts: 0,
+            underrun_detected: false,
+            station_loading: false,
+            action_tx,
+            action_rx,
+            should_quit: false,
+            loading: true,
+            history_messages: Vec::new(),
+            log_level,
+            udp_enabled,
+            udp_port,
+        }
+    }
+
+    /// Helper to add a history message
+    fn add_history_message(&mut self, message: String, message_type: MessageType) {
+        let history_msg = HistoryMessage {
+            message,
+            message_type,
+            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+        };
+        self.history_messages.push(history_msg);
+
+        // Keep only last 1000 messages
+        while self.history_messages.len() > 1000 {
+            self.history_messages.remove(0);
+        }
+    }
+
+    /// Run the application
+    pub async fn run(&mut self) -> Result<()> {
+        let mut tui = Tui::new()?
+            .tick_rate(4.0)   // 4 ticks/sec for animations
+            .frame_rate(60.0); // 60 fps max for rendering
+
+        tui.enter()?;
+
+        // Initialize components
+        for component in self.components.iter_mut() {
+            component.register_action_handler(self.action_tx.clone())?;
+            component.register_config_handler(self.config.clone())?;
+            component.init(tui.size()?)?;
+        }
+
+        // Main event loop
+        loop {
+            self.handle_events(&mut tui).await?;
+            self.handle_actions(&mut tui)?;
+
+            if self.should_quit {
+                break;
+            }
+        }
+
+        tui.exit()?;
+        Ok(())
+    }
+
+    /// Handle events from the TUI
+    async fn handle_events(&mut self, tui: &mut Tui) -> Result<()> {
+        let Some(event) = tui.next_event().await else {
+            return Ok(());
+        };
+
+        // Convert events to actions
+        match event {
+            Event::Quit => {
+                self.action_tx.send(Action::Quit)?;
+            }
+            Event::Tick => {
+                self.action_tx.send(Action::Tick)?;
+            }
+            Event::Render => {
+                self.action_tx.send(Action::Render)?;
+            }
+            Event::Resize(w, h) => {
+                self.action_tx.send(Action::Resize(w, h))?;
+            }
+            Event::Key(key) => {
+                self.handle_key_event(key)?;
+            }
+            _ => {}
+        }
+
+        // Forward events to components
+        for component in self.components.iter_mut() {
+            if let Some(action) = component.handle_events(Some(event.clone()))? {
+                self.action_tx.send(action)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle keyboard events
+    fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
+        use crossterm::event::KeyCode;
+
+        // Check for Ctrl+C
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+            info!("Ctrl+C detected, initiating graceful shutdown");
+            self.should_quit = true;
+            return Ok(());
+        }
+
+        // Handle global keyboard shortcuts
+        match key.code {
+            KeyCode::Char('q') => {
+                self.action_tx.send(Action::Quit)?;
+                return Ok(());
+            }
+            KeyCode::Char(' ') => {
+                self.action_tx.send(Action::TogglePause)?;
+                return Ok(());
+            }
+            KeyCode::Char('+') | KeyCode::Char('=') => {
+                self.action_tx.send(Action::VolumeUp)?;
+                return Ok(());
+            }
+            KeyCode::Char('-') | KeyCode::Char('_') => {
+                self.action_tx.send(Action::VolumeDown)?;
+                return Ok(());
+            }
+            _ => {}
+        }
+
+        // Let components handle the key event
+        for component in self.components.iter_mut() {
+            if let Some(action) = component.handle_key_event(key)? {
+                self.action_tx.send(action)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle actions from components
+    fn handle_actions(&mut self, tui: &mut Tui) -> Result<()> {
+        let mut needs_render = false;
+        while let Ok(action) = self.action_rx.try_recv() {
+            if action != Action::Tick && action != Action::Render {
+                info!("{:?}", action);
+            }
+
+            // Handle app-level actions
+            match &action {
+                Action::Quit => {
+                    self.should_quit = true;
+                }
+                Action::Render => {
+                    self.render(tui)?;
+                }
+                Action::Resize(w, h) => {
+                    tui.resize(Rect::new(0, 0, *w, *h))?;
+                }
+                Action::UpdateStations(stations) => {
+                    self.stations = stations.clone();
+                    self.loading = false;
+                }
+                Action::SelectStation(idx) => {
+                    if *idx < self.stations.len() {
+                        self.selected_station = *idx;
+                    }
+                }
+                Action::SetActiveStation(idx) => {
+                    self.active_station = *idx;
+                }
+                Action::SetPlaybackState(state) => {
+                    self.playback_state = state.clone();
+                }
+                Action::SetVolume(level) => {
+                    self.volume = *level;
+                }
+                Action::Error(msg) => {
+                    self.add_history_message(msg.clone(), MessageType::Error);
+                }
+                Action::ToggleHelp => {
+                    info!("ToggleHelp action received");
+                    // Toggle help visibility synchronously in components
+                    for (i, component) in self.components.iter_mut().enumerate() {
+                        info!("Updating component {} with ToggleHelp", i);
+                        let _ = component.update(Action::ToggleHelp);
+                    }
+                    // Mark that we need to render immediately
+                    needs_render = true;
+                }
+                Action::Play => {
+                    self.play_station()?;
+                    // Trigger render to show playback state
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::Stop => {
+                    self.stop_playback();
+                    // Trigger render to show playback state
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::TogglePause => {
+                    self.toggle_pause()?;
+                    // Trigger render to show playback state
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::Pause => {
+                    self.pause_playback();
+                    // Trigger render to show playback state
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::ResumePlayback => {
+                    self.resume_playback()?;
+                    // Trigger render to show playback state
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::VolumeUp => {
+                    self.volume_up();
+                    // Sync volume to components
+                    self.action_tx.send(Action::SetVolume(self.volume))?;
+                    // Trigger render to show volume
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::VolumeDown => {
+                    self.volume_down();
+                    // Sync volume to components
+                    self.action_tx.send(Action::SetVolume(self.volume))?;
+                    // Trigger render to show volume
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::TuneStation(station_id) => {
+                    if let Some(index) = self.stations.iter().position(|s| s.id == *station_id) {
+                        self.selected_station = index;
+                        self.play_station()?;
+                    }
+                }
+                Action::TuneNext => {
+                    if !self.stations.is_empty() {
+                        let current = self.selected_station;
+                        self.selected_station = if current == self.stations.len() - 1 {
+                            0
+                        } else {
+                            current + 1
+                        };
+                        self.play_station()?;
+                    }
+                }
+                Action::TunePrev => {
+                    if !self.stations.is_empty() {
+                        let current = self.selected_station;
+                        self.selected_station = if current == 0 {
+                            self.stations.len() - 1
+                        } else {
+                            current - 1
+                        };
+                        self.play_station()?;
+                    }
+                }
+                Action::StationUp => {
+                    if self.selected_station > 0 {
+                        self.selected_station -= 1;
+                    }
+                    // Sync with StationList component
+                    if let Some(station_list) = self.components.get_mut(0) {
+                        let _ = station_list.update(Action::SelectStation(self.selected_station));
+                    }
+                    // Trigger render to update selection highlight
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::StationDown => {
+                    if self.selected_station < self.stations.len().saturating_sub(1) {
+                        self.selected_station += 1;
+                    }
+                    // Sync with StationList component
+                    if let Some(station_list) = self.components.get_mut(0) {
+                        let _ = station_list.update(Action::SelectStation(self.selected_station));
+                    }
+                    // Trigger render to update selection highlight
+                    self.action_tx.send(Action::Render)?;
+                }
+                Action::SelectStation(idx) => {
+                    if *idx < self.stations.len() {
+                        self.selected_station = *idx;
+                    }
+                    // Sync with StationList component
+                    if let Some(station_list) = self.components.get_mut(0) {
+                        let _ = station_list.update(Action::SelectStation(self.selected_station));
+                    }
+                }
+                _ => {}
+            }
+
+            // Forward to all components, but skip actions already handled at app level
+            // to avoid double-processing
+            let should_forward = match &action {
+                // These actions are handled at app level and should not be forwarded to components
+                Action::Play | Action::Stop | Action::TogglePause | Action::Pause | Action::ResumePlayback |
+                Action::VolumeUp | Action::VolumeDown | Action::SetVolume(_) |
+                Action::TuneStation(_) | Action::TuneNext | Action::TunePrev |
+                Action::StationUp | Action::StationDown |
+                Action::Quit => false,
+                _ => true,
+            };
+
+            if should_forward {
+                for component in self.components.iter_mut() {
+                    if let Some(new_action) = component.update(action.clone())? {
+                        self.action_tx.send(new_action)?;
+                    }
+                }
+            }
+
+            // Always update components with state changes (but not as actions)
+            // This ensures components reflect the current app state
+            match &action {
+                Action::UpdateStations(stations) => {
+                    // Update StationList component with new stations
+                    if let Some(station_list) = self.components.get_mut(0) {
+                        let _ = station_list.update(action.clone());
+                    }
+                }
+                Action::SetActiveStation(idx) => {
+                    // Update StationList component with active station
+                    if let Some(station_list) = self.components.get_mut(0) {
+                        let _ = station_list.update(action.clone());
+                    }
+                    // Update NowPlaying component
+                    if let Some(now_playing) = self.components.get_mut(1) {
+                        let _ = now_playing.update(action.clone());
+                    }
+                }
+                Action::SetPlaybackState(state) => {
+                    // Update NowPlaying component
+                    if let Some(now_playing) = self.components.get_mut(1) {
+                        let _ = now_playing.update(action.clone());
+                    }
+                }
+                Action::SetVolume(level) => {
+                    // Update NowPlaying component
+                    if let Some(now_playing) = self.components.get_mut(1) {
+                        let _ = now_playing.update(action.clone());
+                    }
+                    // Update BottomControls component
+                    if let Some(bottom_controls) = self.components.get_mut(4) {
+                        let _ = bottom_controls.update(action.clone());
+                    }
+                }
+                Action::Tick => {
+                    // Update all components with tick
+                    for component in self.components.iter_mut() {
+                        let _ = component.update(action.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Render immediately if needed (for UI actions like ToggleHelp)
+        if needs_render {
+            self.render(tui)?;
+        }
+
+        Ok(())
+    }
+
+    /// Play the currently selected station
+    fn play_station(&mut self) -> Result<()> {
+        debug!("play_station called");
+        if let Some(station) = self.stations.get(self.selected_station) {
+            let station = station.clone();
+            info!(station_id = %station.id, station_title = %station.title, "Starting playback");
+
+            if let Some(ref sink) = self.sink {
+                self.active_station = Some(self.selected_station);
+                let current_time = Instant::now();
+                self.playback_start_time = Some(current_time);
+                self.playback_start_time_for_underrun = Some(current_time);
+                self.station_loading = true;
+
+                if let Some(pause_time) = self.last_pause_time.take() {
+                    if let Some(start) = self.playback_start_time {
+                        self.total_played += pause_time.duration_since(start);
+                    }
+                }
+
+                // Stop any existing playback
+                if let Ok(locked_sink) = sink.lock() {
+                    locked_sink.stop();
+                }
+
+                let sink = sink.clone();
+                let log_tx = self.log_tx.clone();
+                let metadata_tx = self.metadata_tx.clone();
+                let station_title_for_completion = station.title.clone();
+                let volume = self.volume;
+                let action_tx = self.action_tx.clone();
+
+                // Spawn playback task
+                tokio::spawn(async move {
+                    match audio::start_playback(&station, sink, metadata_tx, log_tx.clone(), volume).await {
+                        Ok(inner_handle) => {
+                            match inner_handle.await {
+                                Ok(Ok(())) => {
+                                    let _ = action_tx.send(Action::Error(
+                                        crate::i18n::t("starting-playback").replace("{$station}", &station_title_for_completion)
+                                    ));
+                                    let _ = log_tx.send(HistoryMessage {
+                                        message: crate::i18n::t("connecting-to-stream"),
+                                        message_type: MessageType::System,
+                                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                    }).await;
+                                    let _ = log_tx.send(HistoryMessage {
+                                        message: "CLEAR_STATION_LOADING".to_string(),
+                                        message_type: MessageType::Background,
+                                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                    }).await;
+                                }
+                                Ok(Err(e)) => {
+                                    let _ = action_tx.send(Action::Error(format!("Playback error: {}", e)));
+                                }
+                                Err(join_error) => {
+                                    let _ = action_tx.send(Action::Error(format!("Join error: {}", join_error)));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let _ = action_tx.send(Action::Error(format!("Playback error: {}", e)));
+                        }
+                    }
+                });
+
+                self.playback_state = PlaybackState::Playing;
+
+                // Sync state to components
+                let _ = self.action_tx.send(Action::SetActiveStation(self.active_station));
+                let _ = self.action_tx.send(Action::SetPlaybackState(self.playback_state.clone()));
+            }
+        }
+        Ok(())
+    }
+
+    /// Stop playback
+    fn stop_playback(&mut self) {
+        debug!("stop_playback called");
+        let old_state = self.playback_state.clone();
+        if let Some(ref sink) = self.sink {
+            if let Ok(sink) = sink.lock() {
+                match self.playback_state {
+                    PlaybackState::Playing => {
+                        sink.stop();
+                        sink.empty();
+                        self.playback_state = PlaybackState::Stopped;
+                        if let Some(start) = self.playback_start_time.take() {
+                            self.total_played += start.elapsed();
+                        }
+                        self.last_pause_time = None;
+                    }
+                    PlaybackState::Paused => {
+                        sink.stop();
+                        sink.empty();
+                        self.playback_state = PlaybackState::Stopped;
+                        self.last_pause_time = None;
+                    }
+                    PlaybackState::Stopped => {}
+                }
+            }
+        }
+        self.restart_attempts = 0;
+        self.last_restart_time = None;
+
+        // Sync state to components if it changed
+        if old_state != PlaybackState::Stopped {
+            let _ = self.action_tx.send(Action::SetPlaybackState(self.playback_state.clone()));
+        }
+    }
+
+    /// Toggle pause/resume
+    fn toggle_pause(&mut self) -> Result<()> {
+        match self.playback_state {
+            PlaybackState::Playing => {
+                self.pause_playback();
+            }
+            PlaybackState::Paused => {
+                self.resume_playback()?;
+            }
+            PlaybackState::Stopped => {
+                // Do nothing
+            }
+        }
+        Ok(())
+    }
+
+    /// Pause playback
+    fn pause_playback(&mut self) {
+        debug!("pause_playback called");
+        if let Some(ref sink) = self.sink {
+            if let Ok(sink) = sink.lock() {
+                if matches!(self.playback_state, PlaybackState::Playing) {
+                    sink.pause();
+                    self.playback_state = PlaybackState::Paused;
+                    if let Some(start) = self.playback_start_time.take() {
+                        self.total_played += start.elapsed();
+                    }
+                    self.last_pause_time = Some(Instant::now());
+
+                    // Sync state to components
+                    let _ = self.action_tx.send(Action::SetPlaybackState(self.playback_state.clone()));
+                }
+            }
+        }
+        self.restart_attempts = 0;
+        self.last_restart_time = None;
+    }
+
+    /// Resume playback
+    fn resume_playback(&mut self) -> Result<()> {
+        debug!("resume_playback called");
+        if matches!(self.playback_state, PlaybackState::Paused) {
+            if let Some(ref sink) = self.sink {
+                if let Ok(sink) = sink.lock() {
+                    sink.play();
+                    self.playback_state = PlaybackState::Playing;
+                    self.playback_start_time = Some(Instant::now());
+                    self.last_pause_time = None;
+
+                    // Sync state to components
+                    let _ = self.action_tx.send(Action::SetPlaybackState(self.playback_state.clone()));
+                }
+            }
+        } else {
+            // If not paused, just start playing
+            self.play_station()?;
+        }
+        Ok(())
+    }
+
+    /// Increase volume
+    fn volume_up(&mut self) {
+        self.volume = (self.volume + 0.05).min(2.0);
+        if let Some(ref sink) = self.sink {
+            if let Ok(sink) = sink.lock() {
+                sink.set_volume(self.volume);
+            }
+        }
+    }
+
+    /// Decrease volume
+    fn volume_down(&mut self) {
+        self.volume = (self.volume - 0.05).max(0.0);
+        if let Some(ref sink) = self.sink {
+            if let Ok(sink) = sink.lock() {
+                sink.set_volume(self.volume);
+            }
+        }
+    }
+
+    /// Render the UI
+    fn render(&mut self, tui: &mut Tui) -> Result<()> {
+        tui.draw(|frame| {
+            let layout = Self::calculate_layout(frame.area());
+
+            // Render each component in its area
+            for (i, component) in self.components.iter_mut().enumerate() {
+                let area = match i {
+                    0 => layout.left_panel,      // Station list
+                    1 => layout.right_top,       // Now playing
+                    2 => layout.right_bottom,    // History
+                    4 => layout.bottom,          // Bottom controls
+                    _ => continue, // Help renders on full screen
+                };
+                let _ = component.draw(frame, area);
+            }
+
+            // Render help on top (overlay) if visible
+            // Help component is index 3
+            if let Some(help_comp) = self.components.get_mut(3) {
+                let _ = help_comp.draw(frame, frame.area());
+            }
+        })?;
+        Ok(())
+    }
+
+    /// Calculate layout rectangles
+    fn calculate_layout(area: Rect) -> AppLayout {
+        // Main vertical split: content area and bottom controls
+        let app_layout = RatatuiLayout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Fill(1), Constraint::Length(2)].as_ref())
+            .split(area);
+
+        // Horizontal split: station list and playback/history
+        let chunks = RatatuiLayout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+            .split(app_layout[0]);
+
+        // Vertical split of right panel: now playing and history
+        let right_chunks = RatatuiLayout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(10), Constraint::Fill(1)].as_ref())
+            .split(chunks[1]);
+
+        AppLayout {
+            bottom: app_layout[1],
+            left_panel: chunks[0],
+            right_top: right_chunks[0],
+            right_bottom: right_chunks[1],
+        }
+    }
+
+    /// Send an action to be processed
+    pub fn send_action(&self, action: Action) -> Result<()> {
+        self.action_tx.send(action)?;
+        Ok(())
+    }
+}
+
+/// Layout areas for the application
+#[derive(Debug, Clone)]
+pub struct AppLayout {
+    pub bottom: Rect,
+    pub left_panel: Rect,
+    pub right_top: Rect,
+    pub right_bottom: Rect,
+}
