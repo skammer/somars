@@ -245,11 +245,12 @@ impl App {
                 self.action_tx.send(Action::VolumeDown)?;
                 return Ok(());
             }
-            _ => {}
+            _ => {
+                // For other keys, don't process them here - let components handle them via handle_events
+                // This prevents double processing of key events
+            }
         }
 
-        // Key events for components are handled in handle_events via component.handle_events
-        // This prevents double processing of key events by components
         Ok(())
     }
 
@@ -345,6 +346,14 @@ impl App {
                 Action::TuneStation(station_id) => {
                     if let Some(index) = self.stations.iter().position(|s| s.id == *station_id) {
                         self.selected_station = index;
+                        // Update NowPlaying component with the selected station details
+                        if let Some(now_playing) = self.components.get_mut(1) {
+                            if let Some(station) = self.stations.get(self.selected_station).cloned() {
+                                let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                            } else {
+                                let _ = now_playing.update(Action::SetSelectedStation(None));
+                            }
+                        }
                         self.play_station()?;
                     }
                 }
@@ -356,6 +365,14 @@ impl App {
                         } else {
                             current + 1
                         };
+                        // Update NowPlaying component with the selected station details
+                        if let Some(now_playing) = self.components.get_mut(1) {
+                            if let Some(station) = self.stations.get(self.selected_station).cloned() {
+                                let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                            } else {
+                                let _ = now_playing.update(Action::SetSelectedStation(None));
+                            }
+                        }
                         self.play_station()?;
                     }
                 }
@@ -367,6 +384,14 @@ impl App {
                         } else {
                             current - 1
                         };
+                        // Update NowPlaying component with the selected station details
+                        if let Some(now_playing) = self.components.get_mut(1) {
+                            if let Some(station) = self.stations.get(self.selected_station).cloned() {
+                                let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                            } else {
+                                let _ = now_playing.update(Action::SetSelectedStation(None));
+                            }
+                        }
                         self.play_station()?;
                     }
                 }
@@ -377,6 +402,14 @@ impl App {
                     // Sync with StationList component
                     if let Some(station_list) = self.components.get_mut(0) {
                         let _ = station_list.update(Action::SelectStation(self.selected_station));
+                    }
+                    // Update NowPlaying component with the selected station details
+                    if let Some(now_playing) = self.components.get_mut(1) {
+                        if let Some(station) = self.stations.get(self.selected_station).cloned() {
+                            let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                        } else {
+                            let _ = now_playing.update(Action::SetSelectedStation(None));
+                        }
                     }
                     // Trigger render to update selection highlight
                     self.action_tx.send(Action::Render)?;
@@ -389,6 +422,14 @@ impl App {
                     if let Some(station_list) = self.components.get_mut(0) {
                         let _ = station_list.update(Action::SelectStation(self.selected_station));
                     }
+                    // Update NowPlaying component with the selected station details
+                    if let Some(now_playing) = self.components.get_mut(1) {
+                        if let Some(station) = self.stations.get(self.selected_station).cloned() {
+                            let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                        } else {
+                            let _ = now_playing.update(Action::SetSelectedStation(None));
+                        }
+                    }
                     // Trigger render to update selection highlight
                     self.action_tx.send(Action::Render)?;
                 }
@@ -399,6 +440,14 @@ impl App {
                     // Sync with StationList component
                     if let Some(station_list) = self.components.get_mut(0) {
                         let _ = station_list.update(Action::SelectStation(self.selected_station));
+                    }
+                    // Update NowPlaying component with the selected station details
+                    if let Some(now_playing) = self.components.get_mut(1) {
+                        if let Some(station) = self.stations.get(self.selected_station).cloned() {
+                            let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                        } else {
+                            let _ = now_playing.update(Action::SetSelectedStation(None));
+                        }
                     }
                 }
                 _ => {}
@@ -427,10 +476,19 @@ impl App {
             // Always update components with state changes (but not as actions)
             // This ensures components reflect the current app state
             match &action {
-                Action::UpdateStations(stations) => {
+                Action::UpdateStations(ref stations) => {
+                    self.stations = stations.clone();
                     // Update StationList component with new stations
                     if let Some(station_list) = self.components.get_mut(0) {
                         let _ = station_list.update(action.clone());
+                    }
+                    // Update NowPlaying component with the selected station if it exists
+                    if let Some(now_playing) = self.components.get_mut(1) {
+                        if let Some(station) = self.stations.get(self.selected_station).cloned() {
+                            let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                        } else {
+                            let _ = now_playing.update(Action::SetSelectedStation(None));
+                        }
                     }
                 }
                 Action::SetActiveStation(idx) => {

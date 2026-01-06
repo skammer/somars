@@ -93,6 +93,9 @@ impl Component for NowPlaying {
             Action::SetVolume(level) => {
                 self.set_volume(level);
             }
+            Action::SetSelectedStation(station) => {
+                self.set_selected_station(station);
+            }
             _ => {}
         }
         Ok(None)

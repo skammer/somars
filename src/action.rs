@@ -53,4 +53,5 @@ pub enum Action {
     UpdateStations(Vec<crate::station::Station>),
     SetActiveStation(Option<usize>),
     SetPlaybackState(crate::PlaybackState),
+    SetSelectedStation(Option<crate::station::Station>),
 }
