@@ -36,6 +36,8 @@ pub struct StationList {
     spinner_state: usize,
     /// Spinner frames
     spinner_frames: Vec<&'static str>,
+    /// Scroll offset to manage visible portion of list
+    scroll_offset: usize,
     /// Action sender
     action_tx: Option<UnboundedSender<Action>>,
 }
@@ -50,6 +52,7 @@ impl StationList {
             loading: true,
             spinner_state: 0,
             spinner_frames: vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+            scroll_offset: 0,
             action_tx: None,
         }
     }
@@ -124,8 +127,7 @@ impl Component for StationList {
 
         match key.code {
             KeyCode::Up => Ok(self.move_up()),
-            KeyCode::Down | KeyCode::Char('j') => Ok(self.move_down()),
-            KeyCode::Char('k') => Ok(self.move_up()),
+            KeyCode::Down => Ok(self.move_down()),
             KeyCode::Enter => Ok(Some(Action::Play)),
             _ => Ok(None),
         }
@@ -157,21 +159,48 @@ impl Component for StationList {
         if self.loading {
             self.render_loading(frame, area)?;
         } else {
+            // Calculate how many items can be displayed in the available area
+            // Account for borders and padding (top border + bottom border + title + bottom text)
+            let available_height = area.height.saturating_sub(3) as usize; // Account for borders and title/bottom text
+
+            // Adjust scroll offset to keep selected item visible
+            if self.selected_index < self.scroll_offset {
+                // Selected item is above visible area, scroll up to it
+                self.scroll_offset = self.selected_index;
+            } else if available_height > 0 && self.selected_index >= self.scroll_offset + available_height {
+                // Selected item is below visible area, scroll down to it
+                self.scroll_offset = self.selected_index.saturating_sub(available_height - 1);
+            }
+
             // Create a temporary ListState for rendering
             let mut list_state = ListState::default();
-            list_state.select(Some(self.selected_index));
+            // Calculate the relative position of the selected item within the visible window
+            let relative_selected = if self.selected_index >= self.scroll_offset {
+                self.selected_index - self.scroll_offset
+            } else {
+                0
+            };
+            list_state.select(Some(relative_selected));
 
-            let stations = self.stations.clone();
             let active_station = self.active_station;
 
             let selected_pos = self.selected_index + 1;
-            let total_stations = stations.len();
+            let total_stations = self.stations.len();
 
-            let station_items: Vec<ListItem> = stations
+            // Only take the visible stations based on scroll offset
+            let visible_stations: Vec<&Station> = self.stations
+                .iter()
+                .skip(self.scroll_offset)
+                .take(available_height)
+                .collect();
+
+            let station_items: Vec<ListItem> = visible_stations
                 .iter()
                 .enumerate()
                 .map(|(i, s)| {
-                    let style = if Some(i) == active_station {
+                    // Calculate the actual index in the full list
+                    let actual_index = self.scroll_offset + i;
+                    let style = if Some(actual_index) == active_station {
                         Style::default().add_modifier(ratatui::style::Modifier::UNDERLINED)
                     } else {
                         Style::default()
