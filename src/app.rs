@@ -248,13 +248,8 @@ impl App {
             _ => {}
         }
 
-        // Let components handle the key event
-        for component in self.components.iter_mut() {
-            if let Some(action) = component.handle_key_event(key)? {
-                self.action_tx.send(action)?;
-            }
-        }
-
+        // Key events for components are handled in handle_events via component.handle_events
+        // This prevents double processing of key events by components
         Ok(())
     }
 
