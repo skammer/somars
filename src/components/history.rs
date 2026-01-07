@@ -9,6 +9,7 @@ use crate::{
     utils::format_duration,
     PlaybackState,
     MessageType,
+    HistoryMessage,
 };
 
 use components::Component;
@@ -22,17 +23,6 @@ use ratatui::{
 };
 use std::collections::{HashMap, VecDeque};
 use tokio::sync::mpsc::UnboundedSender;
-
-/// History message
-#[derive(Clone, Debug)]
-pub struct HistoryMessage {
-    /// The message text
-    pub message: String,
-    /// The type of message
-    pub message_type: MessageType,
-    /// The timestamp
-    pub timestamp: String,
-}
 
 /// History component
 pub struct History {
@@ -231,12 +221,8 @@ impl Component for History {
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
-            Action::Error(msg) => {
-                self.add_message(HistoryMessage {
-                    message: msg,
-                    message_type: MessageType::Error,
-                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                });
+            Action::AddHistoryMessage(msg) => {
+                self.add_message(msg);
             }
             Action::ScrollHistoryUp => {
                 self.scroll_up();
@@ -276,10 +262,10 @@ impl Component for History {
             .map(|(idx, msg)| {
                 let style = match msg.message_type {
                     MessageType::Error => Style::default().fg(Color::Red),
-                    MessageType::Info => Style::default().fg(Color::White),
-                    MessageType::System => Style::default().fg(Color::Yellow),
+                    MessageType::Info => Style::default().fg(Color::Green),
+                    MessageType::System => Style::default().fg(Color::Green),
                     MessageType::Background => Style::default().fg(Color::DarkGray),
-                    MessageType::Playback => Style::default().fg(Color::Green),
+                    MessageType::Playback => Style::default().fg(Color::White),
                 };
 
                 let timestamp_span = Span::styled(&msg.timestamp, style);
@@ -331,7 +317,8 @@ impl Component for History {
                     .title_bottom(
                         Line::from(vec![Span::raw(format!("[{}]", time_str))])
                         .left_aligned(),
-                    ),
+                    )
+                    .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
             );
 
         frame.render_stateful_widget(history_list, area, &mut self.scroll_state.clone());

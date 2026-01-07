@@ -143,12 +143,15 @@ impl App {
             message_type,
             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
         };
-        self.history_messages.push(history_msg);
+        self.history_messages.push(history_msg.clone());
 
         // Keep only last 1000 messages
         while self.history_messages.len() > 1000 {
             self.history_messages.remove(0);
         }
+
+        // Forward to the History component
+        let _ = self.action_tx.send(Action::AddHistoryMessage(history_msg));
     }
 
     /// Run the application
@@ -622,9 +625,11 @@ impl App {
                         Ok(inner_handle) => {
                             match inner_handle.await {
                                 Ok(Ok(())) => {
-                                    let _ = action_tx.send(Action::Error(
-                                        crate::i18n::t("starting-playback").replace("{$station}", &station_title_for_completion)
-                                    ));
+                                    let _ = log_tx.send(HistoryMessage {
+                                        message: crate::i18n::t("starting-playback").replace("{$station}", &station_title_for_completion),
+                                        message_type: MessageType::System,
+                                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                    }).await;
                                     let _ = log_tx.send(HistoryMessage {
                                         message: crate::i18n::t("connecting-to-stream"),
                                         message_type: MessageType::System,

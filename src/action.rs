@@ -57,4 +57,5 @@ pub enum Action {
     SetTotalPlayed(std::time::Duration),
     StartTrackingPlayTime,
     StopTrackingPlayTime,
+    AddHistoryMessage(crate::HistoryMessage),
 }

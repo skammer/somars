@@ -49,8 +49,7 @@ use i18n::t;
 use app::App;
 
 
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MessageType {
     Error,
     Info,
@@ -59,6 +58,7 @@ pub enum MessageType {
     Playback,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HistoryMessage {
     pub message: String,
     pub message_type: MessageType,
@@ -311,7 +311,7 @@ pub enum PlaybackState {
              if log_msg.message == "CLEAR_STATION_LOADING" {
                  // This will be handled in the app
              } else {
-                 let _ = app_action_tx.send(action::Action::Error(log_msg.message));
+                 let _ = app_action_tx.send(action::Action::AddHistoryMessage(log_msg));
              }
          }
      });
