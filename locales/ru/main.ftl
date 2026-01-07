@@ -67,3 +67,4 @@ help-version = Показать информацию о версии
 help-broadcast = Отправить UDP-команду в сеть и выйти
 help-locale = Установить язык (en, ru)
 help-close = Нажмите ? чтобы закрыть эту справку
+help-homepage = Домашняя страница:
