@@ -54,4 +54,7 @@ pub enum Action {
     SetActiveStation(Option<usize>),
     SetPlaybackState(crate::PlaybackState),
     SetSelectedStation(Option<crate::station::Station>),
+    SetTotalPlayed(std::time::Duration),
+    StartTrackingPlayTime,
+    StopTrackingPlayTime,
 }

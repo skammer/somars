@@ -129,6 +129,19 @@ impl History {
         }
     }
 
+    /// Set the playback start time to now
+    pub fn start_tracking_play_time(&mut self) {
+        self.playback_start_time = Some(std::time::Instant::now());
+    }
+
+    /// Stop tracking play time and accumulate the elapsed time
+    pub fn stop_tracking_play_time(&mut self) {
+        if let Some(start_time) = self.playback_start_time {
+            self.total_played += start_time.elapsed();
+            self.playback_start_time = None;
+        }
+    }
+
     /// Scroll up
     fn scroll_up(&mut self) {
         if !self.messages.is_empty() {
@@ -233,6 +246,15 @@ impl Component for History {
             }
             Action::SetPlaybackState(state) => {
                 self.set_playback_state(state);
+            }
+            Action::SetTotalPlayed(duration) => {
+                self.set_total_played(duration);
+            }
+            Action::StartTrackingPlayTime => {
+                self.start_tracking_play_time();
+            }
+            Action::StopTrackingPlayTime => {
+                self.stop_tracking_play_time();
             }
             Action::SetVolume(_) => {
                 // Volume changes don't affect history directly

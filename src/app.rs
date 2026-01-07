@@ -502,9 +502,40 @@ impl App {
                     }
                 }
                 Action::SetPlaybackState(state) => {
+                    // Update the app's playback state first
+                    let old_state = self.playback_state.clone();
+                    self.playback_state = state.clone();
+
+                    // Check if we need to start/stop tracking play time
+                    if matches!(old_state, PlaybackState::Stopped | PlaybackState::Paused) &&
+                       matches!(state, PlaybackState::Playing) {
+                        // Starting playback - start tracking play time
+                        if let Some(history) = self.components.get_mut(2) {
+                            let _ = history.update(Action::SetTotalPlayed(self.total_played));
+                            let _ = history.update(Action::StartTrackingPlayTime);
+                        }
+                    } else if matches!(old_state, PlaybackState::Playing) &&
+                              !matches!(state, PlaybackState::Playing) {
+                        // Stopping playback - stop tracking and accumulate time
+                        if let Some(history) = self.components.get_mut(2) {
+                            let _ = history.update(Action::StopTrackingPlayTime);
+                            // Update with the accumulated time
+                            let _ = history.update(Action::SetTotalPlayed(self.total_played));
+                        }
+                    } else {
+                        // Just update the timing information normally
+                        if let Some(history) = self.components.get_mut(2) {
+                            let _ = history.update(Action::SetTotalPlayed(self.total_played));
+                        }
+                    }
+
                     // Update NowPlaying component
                     if let Some(now_playing) = self.components.get_mut(1) {
                         let _ = now_playing.update(action.clone());
+                    }
+                    // Update History component with the state change
+                    if let Some(history) = self.components.get_mut(2) {
+                        let _ = history.update(action.clone());
                     }
                 }
                 Action::SetVolume(level) => {
@@ -522,6 +553,24 @@ impl App {
                     for component in self.components.iter_mut() {
                         let _ = component.update(action.clone());
                     }
+                    // Update History component with latest timing information
+                    if let Some(history) = self.components.get_mut(2) {
+                        // Calculate current played time including current session
+                        let current_played = if self.playback_state == PlaybackState::Playing {
+                            if let Some(start) = self.playback_start_time {
+                                self.total_played + start.elapsed()
+                            } else {
+                                self.total_played
+                            }
+                        } else {
+                            self.total_played
+                        };
+                        let _ = history.update(Action::SetTotalPlayed(current_played));
+                        // Update the playback state as well to ensure it's in sync
+                        let _ = history.update(Action::SetPlaybackState(self.playback_state.clone()));
+                    }
+                    // Trigger render to update the playback counter
+                    needs_render = true;
                 }
                 _ => {}
             }
