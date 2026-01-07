@@ -132,24 +132,36 @@ impl History {
         }
     }
 
-    /// Scroll up
+    /// Scroll up (visually up, which means decrease index due to BottomToTop direction)
     fn scroll_up(&mut self) {
-        if !self.messages.is_empty() {
+        let visible_count = self.visible_messages().len();
+        if visible_count == 0 {
+            return;
+        }
+        if self.scroll_state.selected().is_none() {
+            // First scroll - start at position 0 (top of list)
+            self.scroll_state.select(Some(0));
+        } else {
             let i = self.scroll_state.selected().unwrap_or(0);
-            if i > 0 {
-                self.scroll_state.select(Some(i - 1));
-            } else {
-                self.scroll_state.select(Some(0));
+            if i < visible_count - 1 {
+                self.scroll_state.select(Some(i + 1));
             }
         }
     }
 
-    /// Scroll down
+    /// Scroll down (visually down, which means increase index due to BottomToTop direction)
     fn scroll_down(&mut self) {
-        if !self.messages.is_empty() {
+        let visible_count = self.visible_messages().len();
+        if visible_count == 0 {
+            return;
+        }
+        if self.scroll_state.selected().is_none() {
+            // First scroll - start at position 0 (top of list)
+            self.scroll_state.select(Some(0));
+        } else {
             let i = self.scroll_state.selected().unwrap_or(0);
-            if i < self.messages.len() - 1 {
-                self.scroll_state.select(Some(i + 1));
+            if i > 0 {
+                self.scroll_state.select(Some(i - 1));
             }
         }
     }
@@ -213,6 +225,11 @@ impl Component for History {
             }
             KeyCode::Char('k') => {
                 self.scroll_up();
+                Ok(None)
+            }
+            KeyCode::Esc => {
+                // Reset scroll position and hide selection
+                self.scroll_state.select(None);
                 Ok(None)
             }
             _ => Ok(None),
@@ -305,11 +322,12 @@ impl Component for History {
 
         let history_list = List::new(history_items)
             .direction(ListDirection::BottomToTop)
+            .highlight_style(Style::default().bg(Color::Blue))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(t("history"))
-                    .title(Line::from("[jk]").right_aligned())
+                    .title(Line::from("[jk Esc]").right_aligned())
                     .title_bottom(
                         Line::from(vec![Span::raw(format!(
                             "[{} / {}]",
