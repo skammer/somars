@@ -37,23 +37,15 @@ impl Help {
         }
     }
 
-    /// Toggle the help visibility
-    pub fn toggle(&mut self) {
-        self.visible = !self.visible;
-        info!("Help toggled, visible={}", self.visible);
-    }
-
     /// Show the help popup
     pub fn show(&mut self) {
         self.visible = true;
-        info!("Help shown");
     }
 
     /// Hide the help popup
     #[allow(dead_code)]
     pub fn hide(&mut self) {
         self.visible = false;
-        info!("Help hidden");
     }
 
     /// Check if the help is visible
@@ -163,17 +155,17 @@ impl Component for Help {
 
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<Option<Action>> {
         match key.code {
-            KeyCode::Char('?') => {
+            KeyCode::Char('?') | KeyCode::Char('/') => {
                 // Toggle help visibility
+                // Note: / is often the same key as ? without shift
                 Ok(Some(Action::ToggleHelp))
             }
             KeyCode::Esc => {
                 // Close help if visible
                 if self.visible {
-                    Ok(Some(Action::ToggleHelp))
-                } else {
-                    Ok(None)
+                    self.visible = false;
                 }
+                Ok(None)
             }
             _ => Ok(None),
         }
@@ -182,7 +174,11 @@ impl Component for Help {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::ToggleHelp => {
-                self.toggle();
+                // Always show the help when ToggleHelp is received
+                // This avoids the toggle race condition
+                if !self.visible {
+                    self.visible = true;
+                }
             }
             Action::Help => {
                 self.show();

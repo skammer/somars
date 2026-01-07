@@ -310,10 +310,8 @@ impl App {
                     self.add_history_message(msg.clone(), MessageType::Error);
                 }
                 Action::ToggleHelp => {
-                    info!("ToggleHelp action received");
-                    // Toggle help visibility synchronously in components
-                    for (i, component) in self.components.iter_mut().enumerate() {
-                        info!("Updating component {} with ToggleHelp", i);
+                    // Show help visibility synchronously in components
+                    for component in self.components.iter_mut() {
                         let _ = component.update(Action::ToggleHelp);
                     }
                     // Mark that we need to render immediately
