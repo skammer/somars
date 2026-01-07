@@ -75,6 +75,10 @@ pub struct App {
     // UDP control state
     pub udp_enabled: bool,
     pub udp_port: u16,
+
+    // Initial station to play (from CLI or config)
+    pub initial_station: Option<String>,
+    pub auto_played: bool,
 }
 
 impl App {
@@ -86,6 +90,7 @@ impl App {
         metadata_tx: mpsc::Sender<audio::MetadataEvent>,
         log_tx: mpsc::Sender<HistoryMessage>,
         config: Config,
+        initial_station: Option<String>,
     ) -> Self {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
@@ -133,6 +138,8 @@ impl App {
             log_level,
             udp_enabled,
             udp_port,
+            initial_station,
+            auto_played: false,
         }
     }
 
@@ -167,6 +174,11 @@ impl App {
             component.register_action_handler(self.action_tx.clone())?;
             component.register_config_handler(self.config.clone())?;
             component.init(tui.size()?)?;
+        }
+
+        // Sync log level to History component
+        if let Some(history) = self.components.get_mut(2) {
+            let _ = history.update(Action::SetLogLevel(self.log_level));
         }
 
         // Main event loop
@@ -491,6 +503,27 @@ impl App {
                             let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                         } else {
                             let _ = now_playing.update(Action::SetSelectedStation(None));
+                        }
+                    }
+
+                    // Handle initial station selection (from CLI or config)
+                    if !self.auto_played {
+                        if let Some(ref station_id) = self.initial_station {
+                            if let Some(idx) = stations.iter().position(|s| s.id == *station_id) {
+                                self.selected_station = idx;
+                                // Update components with the selection
+                                if let Some(station_list) = self.components.get_mut(0) {
+                                    let _ = station_list.update(Action::SelectStation(idx));
+                                }
+                                if let Some(station) = stations.get(idx).cloned() {
+                                    if let Some(now_playing) = self.components.get_mut(1) {
+                                        let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                                    }
+                                }
+                                // Start playback
+                                let _ = self.play_station();
+                                self.auto_played = true;
+                            }
                         }
                     }
                 }

@@ -224,6 +224,9 @@ impl Component for History {
             Action::AddHistoryMessage(msg) => {
                 self.add_message(msg);
             }
+            Action::SetLogLevel(level) => {
+                self.set_log_level(level);
+            }
             Action::ScrollHistoryUp => {
                 self.scroll_up();
             }

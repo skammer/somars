@@ -148,6 +148,9 @@ pub enum PlaybackState {
      }
      let config_file_path = cli.config.clone();
 
+     // Determine initial station: CLI argument takes priority over config
+     let initial_station = cli.station.or_else(|| config.last_station.clone());
+
      // Initialize i18n
      i18n::init(cli.locale.clone());
 
@@ -228,6 +231,7 @@ pub enum PlaybackState {
          metadata_tx,
          log_tx.clone(),
          config.clone(),
+         initial_station,
      );
 
      // Spawn station fetching task
@@ -320,23 +324,22 @@ pub enum PlaybackState {
      app.run().await?;
 
      // Save configuration before quitting
-     let mut save_config = config::Config::load_or_default();
-     save_config.volume = app.volume;
-     save_config.log_level = app.log_level;
-     save_config.udp_port = udp_port;
-     save_config.udp_enabled = udp_enabled;
+     config.volume = app.volume;
+     config.log_level = app.log_level;
+     config.udp_port = udp_port;
+     config.udp_enabled = udp_enabled;
 
      // Save the last played station
      if let Some(index) = app.active_station {
          if let Some(station) = app.stations.get(index) {
-             save_config.last_station = Some(station.id.clone());
+             config.last_station = Some(station.id.clone());
          }
      }
 
      let save_result = if let Some(path) = &config_file_path {
-         save_config.save_to_path(path)
+         config.save_to_path(path)
      } else {
-         save_config.save()
+         config.save()
      };
 
      if let Err(e) = save_result {

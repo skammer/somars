@@ -58,4 +58,5 @@ pub enum Action {
     StartTrackingPlayTime,
     StopTrackingPlayTime,
     AddHistoryMessage(crate::HistoryMessage),
+    SetLogLevel(u8),
 }
