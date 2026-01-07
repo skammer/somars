@@ -18,7 +18,8 @@ use std::{
     io,
     net::SocketAddr,
     sync::{Arc, Mutex},
-    time::{Duration, Instant}
+    time::{Duration, Instant},
+    mem,
 };
 
 use rodio::{OutputStreamBuilder, Sink};
@@ -172,7 +173,7 @@ pub enum PlaybackState {
      terminal.clear()?;
 
      // Create app state
-     let stream_handle = OutputStreamBuilder::open_default_stream().map_err(|e| {
+     let stream = OutputStreamBuilder::open_default_stream().map_err(|e| {
          error::AppError::Audio(format!("Failed to initialize audio output stream: {}. This could be due to:\n\
                                          - No audio output device available\n\
                                          - Audio device is busy or locked by another application\n\
@@ -180,7 +181,8 @@ pub enum PlaybackState {
                                          Try checking your system's audio settings or restarting your audio service.", e))
      })?;
 
-     let sink = Sink::connect_new(stream_handle.mixer());
+     let mixer = stream.mixer();
+     let sink = Sink::connect_new(mixer);
 
      // Create channels for logging and control
      let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(32);
@@ -320,6 +322,19 @@ pub enum PlaybackState {
      // Run the application
      app.run().await?;
 
+     // Stop audio playback to prevent the OutputStream warning
+     if let Some(sink) = &app.sink {
+         if let Ok(sink) = sink.lock() {
+             sink.stop();
+             sink.empty();
+         }
+     }
+     // Drop the sink explicitly to stop audio before OutputStream is dropped
+     drop(app.sink.take());
+
+     // Give the audio system time to finish
+     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
      // Save configuration before quitting
      config.volume = app.volume;
      config.log_level = app.log_level;
@@ -354,6 +369,10 @@ pub enum PlaybackState {
          LeaveAlternateScreen
      )?;
      terminal.show_cursor()?;
+
+     // Forget the OutputStream to prevent the warning message
+     // This is safe since we're about to exit anyway
+     mem::forget(stream);
 
      Ok(())
  }
