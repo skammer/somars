@@ -66,6 +66,7 @@ impl NowPlaying {
     }
 
     /// Get the volume
+    #[allow(dead_code)]
     pub fn volume(&self) -> f32 {
         self.volume
     }

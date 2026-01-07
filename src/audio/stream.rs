@@ -2,6 +2,8 @@
 //!
 //! This module handles HTTP stream downloads with ICY metadata support.
 
+#![allow(dead_code)]
+
 use icy_metadata::RequestIcyMetadata;
 use super::types::{AudioError, AudioResult};
 use reqwest::Url;

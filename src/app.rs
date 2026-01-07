@@ -16,7 +16,6 @@ use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::{
     layout::{Constraint, Direction, Layout as RatatuiLayout, Rect},
-    Frame,
 };
 use rodio::Sink;
 use std::sync::{Arc, Mutex};
@@ -43,6 +42,7 @@ pub struct App {
     pub volume: f32,
 
     // Audio
+    #[allow(dead_code)]
     pub audio_manager: audio::AudioManager,
     pub sink: Option<Arc<Mutex<Sink>>>,
     pub metadata_tx: mpsc::Sender<audio::MetadataEvent>,
@@ -53,10 +53,13 @@ pub struct App {
     pub total_played: std::time::Duration,
     pub last_pause_time: Option<Instant>,
     pub playback_start_time_for_underrun: Option<Instant>,
+    #[allow(dead_code)]
     pub last_position: std::time::Duration,
+    #[allow(dead_code)]
     pub last_underrun_check: Option<Instant>,
     pub last_restart_time: Option<Instant>,
     pub restart_attempts: u32,
+    #[allow(dead_code)]
     pub underrun_detected: bool,
     pub station_loading: bool,
 
@@ -73,7 +76,9 @@ pub struct App {
     pub log_level: u8,
 
     // UDP control state
+    #[allow(dead_code)]
     pub udp_enabled: bool,
+    #[allow(dead_code)]
     pub udp_port: u16,
 
     // Initial station to play (from CLI or config)
@@ -84,8 +89,8 @@ pub struct App {
 impl App {
     /// Create a new application instance
     pub fn new(
-        tick_rate: f64,
-        frame_rate: f64,
+        _tick_rate: f64,
+        _frame_rate: f64,
         sink: Arc<Mutex<Sink>>,
         metadata_tx: mpsc::Sender<audio::MetadataEvent>,
         log_tx: mpsc::Sender<HistoryMessage>,
@@ -291,11 +296,6 @@ impl App {
                 Action::UpdateStations(stations) => {
                     self.stations = stations.clone();
                     self.loading = false;
-                }
-                Action::SelectStation(idx) => {
-                    if *idx < self.stations.len() {
-                        self.selected_station = *idx;
-                    }
                 }
                 Action::SetActiveStation(idx) => {
                     self.active_station = *idx;
@@ -527,7 +527,7 @@ impl App {
                         }
                     }
                 }
-                Action::SetActiveStation(idx) => {
+                Action::SetActiveStation(_idx) => {
                     // Update StationList component with active station
                     if let Some(station_list) = self.components.get_mut(0) {
                         let _ = station_list.update(action.clone());
@@ -574,7 +574,7 @@ impl App {
                         let _ = history.update(action.clone());
                     }
                 }
-                Action::SetVolume(level) => {
+                Action::SetVolume(_level) => {
                     // Update NowPlaying component
                     if let Some(now_playing) = self.components.get_mut(1) {
                         let _ = now_playing.update(action.clone());
@@ -868,6 +868,7 @@ impl App {
     }
 
     /// Send an action to be processed
+    #[allow(dead_code)]
     pub fn send_action(&self, action: Action) -> Result<()> {
         self.action_tx.send(action)?;
         Ok(())

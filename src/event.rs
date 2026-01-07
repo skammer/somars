@@ -2,6 +2,8 @@
 //!
 //! Events represent raw input from the terminal and system events.
 
+#![allow(dead_code)]
+
 use crossterm::event::{KeyEvent, MouseEvent};
 
 #[derive(Clone, Debug)]

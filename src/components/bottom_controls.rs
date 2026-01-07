@@ -40,11 +40,13 @@ impl BottomControls {
     }
 
     /// Set the log level
+    #[allow(dead_code)]
     pub fn set_log_level(&mut self, level: u8) {
         self.log_level = level;
     }
 
     /// Set the sink length (for debug display)
+    #[allow(dead_code)]
     pub fn set_sink_len(&mut self, len: usize) {
         self.sink_len = len;
     }
@@ -56,7 +58,7 @@ impl Component for BottomControls {
         Ok(())
     }
 
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+    fn update(&mut self, _action: Action) -> Result<Option<Action>> {
         // BottomControls doesn't need to react to actions
         Ok(None)
     }

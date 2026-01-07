@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use fluent::{FluentBundle, FluentResource};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;

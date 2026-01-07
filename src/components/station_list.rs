@@ -78,6 +78,7 @@ impl StationList {
     }
 
     /// Get the loading state
+    #[allow(dead_code)]
     pub fn is_loading(&self) -> bool {
         self.loading
     }

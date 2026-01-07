@@ -78,6 +78,7 @@ impl History {
     }
 
     /// Clear all messages
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.messages.clear();
         self.cache_valid = false;
@@ -100,6 +101,7 @@ impl History {
     }
 
     /// Set the playback start time
+    #[allow(dead_code)]
     pub fn set_playback_start_time(&mut self, time: Option<std::time::Instant>) {
         self.playback_start_time = time;
     }
@@ -167,6 +169,7 @@ impl History {
     }
 
     /// Invalidate the cache
+    #[allow(dead_code)]
     fn invalidate_cache(&mut self) {
         self.cache_valid = false;
     }

@@ -5,7 +5,7 @@
 //! By default, logs are only written to stderr at ERROR level to avoid
 //! interfering with the TUI. To see more detailed logs, set RUST_LOG.
 
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 /// Initialize the tracing subscriber for logging
 ///

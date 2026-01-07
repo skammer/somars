@@ -17,11 +17,8 @@ pub mod stream;
 pub mod types;
 pub mod recovery;
 
-pub use manager::{AudioApp, AudioManager};
-pub use types::{AudioError, AudioResult, AudioState};
+pub use manager::AudioManager;
 
-// Re-export common types
-pub use playback::PlaybackHandle;
-pub use playback::start_playback;
+// Re-export common types and functions
 pub use metadata::MetadataEvent;
-pub use recovery::{RecoveryConfig, RecoveryState, retry_with_backoff, classify_error, ErrorClass};
+pub use playback::start_playback;

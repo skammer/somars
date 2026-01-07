@@ -1,10 +1,8 @@
 use clap::Parser;
 use tracing::{info, warn, error};
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 use crossterm::{
-    event::{poll, read, Event as CrosstermEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
         LeaveAlternateScreen},
@@ -12,12 +10,11 @@ use crossterm::{
 
 use ratatui::{
     backend::CrosstermBackend,
-    widgets::ListState,
     Terminal,
 };
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     io,
     net::SocketAddr,
     sync::{Arc, Mutex},
@@ -249,7 +246,7 @@ pub enum PlaybackState {
 
      // Handle UDP commands by converting them to Actions
      let udp_action_tx = app.action_tx.clone();
-     let udp_log_tx = log_tx.clone();
+     let _udp_log_tx = log_tx.clone();
      tokio::spawn(async move {
          while let Some(cmd) = command_rx.recv().await {
              match cmd {

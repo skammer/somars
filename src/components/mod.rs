@@ -82,6 +82,7 @@ pub trait Component {
 
 /// Layout areas for components
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct LayoutAreas {
     pub left_panel: ratatui::layout::Rect,
     pub right_top: ratatui::layout::Rect,

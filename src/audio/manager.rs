@@ -2,12 +2,11 @@
 //!
 //! Provides a centralized interface for audio playback control.
 
-use super::playback::{start_playback, PlaybackHandle};
-use super::types::{AudioError, AudioResult, AudioState};
-use crate::station::Station;
+#![allow(dead_code)]
+
+use super::types::{AudioResult, AudioState};
 use rodio::Sink;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
 
 /// Audio manager - Centralized control for audio playback
 pub struct AudioManager {

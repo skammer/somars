@@ -50,12 +50,14 @@ impl Help {
     }
 
     /// Hide the help popup
+    #[allow(dead_code)]
     pub fn hide(&mut self) {
         self.visible = false;
         info!("Help hidden");
     }
 
     /// Check if the help is visible
+    #[allow(dead_code)]
     pub fn is_visible(&self) -> bool {
         self.visible
     }

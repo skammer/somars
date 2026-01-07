@@ -1,5 +1,7 @@
 //! Audio module types and errors
 
+#![allow(dead_code)]
+
 use crate::error::AppError;
 use std::fmt;
 
