@@ -2,8 +2,6 @@
 //!
 //! This module handles the actual audio playback operations.
 
-#![allow(dead_code)]
-
 use super::metadata::MetadataEvent;
 use super::stream::{create_icy_client, calculate_prefetch_bytes, parse_bitrate_with_fallback, parse_url, StreamConfig};
 use super::types::{AudioError, AudioResult};

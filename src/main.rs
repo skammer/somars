@@ -27,14 +27,11 @@ use rodio::{OutputStreamBuilder, Sink};
 mod station;
 use crate::station::Station;
 
-// mod keyboard; // Old module, replaced by new App architecture
 mod i18n;
 mod error;
 mod control;
 mod config;
-// mod ui; // Old module, replaced by new App architecture
 mod utils;
-// mod audio_monitor; // Old module, replaced by new App architecture
 mod audio;
 mod logging;
 mod action;

@@ -59,8 +59,6 @@ pub fn init_logging() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_init_logging() {
         // Note: This test will fail if a subscriber is already initialized

@@ -3,8 +3,6 @@
 //! This module provides automatic retry logic and exponential backoff
 //! for recoverable audio errors.
 
-#![allow(dead_code)]
-
 use super::types::{AudioError, AudioResult};
 use std::time::Duration;
 use tokio::time::sleep;

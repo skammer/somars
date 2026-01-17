@@ -2,8 +2,6 @@
 //!
 //! This module provides error handling with integration to color-eyre for rich error reporting.
 
-#![allow(dead_code)]
-
 use thiserror::Error;
 
 /// Application-specific error type

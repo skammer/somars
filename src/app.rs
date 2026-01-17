@@ -23,6 +23,13 @@ use std::time::Instant;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{info, debug};
 
+// Component indices - must match order in App::new()
+const COMPONENT_STATION_LIST: usize = 0;
+const COMPONENT_NOW_PLAYING: usize = 1;
+const COMPONENT_HISTORY: usize = 2;
+const COMPONENT_HELP: usize = 3;
+const COMPONENT_BOTTOM_CONTROLS: usize = 4;
+
 /// History message type alias - use the one from main.rs
 pub type HistoryMessage = crate::HistoryMessage;
 
@@ -182,7 +189,7 @@ impl App {
         }
 
         // Sync log level to History component
-        if let Some(history) = self.components.get_mut(2) {
+        if let Some(history) = self.components.get_mut(COMPONENT_HISTORY) {
             let _ = history.update(Action::SetLogLevel(self.log_level));
         }
 
@@ -279,7 +286,7 @@ impl App {
         let mut needs_render = false;
         while let Ok(action) = self.action_rx.try_recv() {
             if action != Action::Tick && action != Action::Render {
-                info!("{:?}", action);
+                debug!(?action);
             }
 
             // Handle app-level actions
@@ -360,7 +367,7 @@ impl App {
                     if let Some(index) = self.stations.iter().position(|s| s.id == *station_id) {
                         self.selected_station = index;
                         // Update NowPlaying component with the selected station details
-                        if let Some(now_playing) = self.components.get_mut(1) {
+                        if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                             if let Some(station) = self.stations.get(self.selected_station).cloned() {
                                 let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                             } else {
@@ -379,7 +386,7 @@ impl App {
                             current + 1
                         };
                         // Update NowPlaying component with the selected station details
-                        if let Some(now_playing) = self.components.get_mut(1) {
+                        if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                             if let Some(station) = self.stations.get(self.selected_station).cloned() {
                                 let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                             } else {
@@ -398,7 +405,7 @@ impl App {
                             current - 1
                         };
                         // Update NowPlaying component with the selected station details
-                        if let Some(now_playing) = self.components.get_mut(1) {
+                        if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                             if let Some(station) = self.stations.get(self.selected_station).cloned() {
                                 let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                             } else {
@@ -413,11 +420,11 @@ impl App {
                         self.selected_station -= 1;
                     }
                     // Sync with StationList component
-                    if let Some(station_list) = self.components.get_mut(0) {
+                    if let Some(station_list) = self.components.get_mut(COMPONENT_STATION_LIST) {
                         let _ = station_list.update(Action::SelectStation(self.selected_station));
                     }
                     // Update NowPlaying component with the selected station details
-                    if let Some(now_playing) = self.components.get_mut(1) {
+                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                         if let Some(station) = self.stations.get(self.selected_station).cloned() {
                             let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                         } else {
@@ -432,11 +439,11 @@ impl App {
                         self.selected_station += 1;
                     }
                     // Sync with StationList component
-                    if let Some(station_list) = self.components.get_mut(0) {
+                    if let Some(station_list) = self.components.get_mut(COMPONENT_STATION_LIST) {
                         let _ = station_list.update(Action::SelectStation(self.selected_station));
                     }
                     // Update NowPlaying component with the selected station details
-                    if let Some(now_playing) = self.components.get_mut(1) {
+                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                         if let Some(station) = self.stations.get(self.selected_station).cloned() {
                             let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                         } else {
@@ -451,11 +458,11 @@ impl App {
                         self.selected_station = *idx;
                     }
                     // Sync with StationList component
-                    if let Some(station_list) = self.components.get_mut(0) {
+                    if let Some(station_list) = self.components.get_mut(COMPONENT_STATION_LIST) {
                         let _ = station_list.update(Action::SelectStation(self.selected_station));
                     }
                     // Update NowPlaying component with the selected station details
-                    if let Some(now_playing) = self.components.get_mut(1) {
+                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                         if let Some(station) = self.stations.get(self.selected_station).cloned() {
                             let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                         } else {
@@ -492,11 +499,11 @@ impl App {
                 Action::UpdateStations(ref stations) => {
                     self.stations = stations.clone();
                     // Update StationList component with new stations
-                    if let Some(station_list) = self.components.get_mut(0) {
+                    if let Some(station_list) = self.components.get_mut(COMPONENT_STATION_LIST) {
                         let _ = station_list.update(action.clone());
                     }
                     // Update NowPlaying component with the selected station if it exists
-                    if let Some(now_playing) = self.components.get_mut(1) {
+                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                         if let Some(station) = self.stations.get(self.selected_station).cloned() {
                             let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                         } else {
@@ -510,11 +517,11 @@ impl App {
                             if let Some(idx) = stations.iter().position(|s| s.id == *station_id) {
                                 self.selected_station = idx;
                                 // Update components with the selection
-                                if let Some(station_list) = self.components.get_mut(0) {
+                                if let Some(station_list) = self.components.get_mut(COMPONENT_STATION_LIST) {
                                     let _ = station_list.update(Action::SelectStation(idx));
                                 }
                                 if let Some(station) = stations.get(idx).cloned() {
-                                    if let Some(now_playing) = self.components.get_mut(1) {
+                                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                                         let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
                                     }
                                 }
@@ -527,11 +534,11 @@ impl App {
                 }
                 Action::SetActiveStation(_idx) => {
                     // Update StationList component with active station
-                    if let Some(station_list) = self.components.get_mut(0) {
+                    if let Some(station_list) = self.components.get_mut(COMPONENT_STATION_LIST) {
                         let _ = station_list.update(action.clone());
                     }
                     // Update NowPlaying component
-                    if let Some(now_playing) = self.components.get_mut(1) {
+                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                         let _ = now_playing.update(action.clone());
                     }
                 }
@@ -544,41 +551,41 @@ impl App {
                     if matches!(old_state, PlaybackState::Stopped | PlaybackState::Paused) &&
                        matches!(state, PlaybackState::Playing) {
                         // Starting playback - start tracking play time
-                        if let Some(history) = self.components.get_mut(2) {
+                        if let Some(history) = self.components.get_mut(COMPONENT_HISTORY) {
                             let _ = history.update(Action::SetTotalPlayed(self.total_played));
                             let _ = history.update(Action::StartTrackingPlayTime);
                         }
                     } else if matches!(old_state, PlaybackState::Playing) &&
                               !matches!(state, PlaybackState::Playing) {
                         // Stopping playback - stop tracking and accumulate time
-                        if let Some(history) = self.components.get_mut(2) {
+                        if let Some(history) = self.components.get_mut(COMPONENT_HISTORY) {
                             let _ = history.update(Action::StopTrackingPlayTime);
                             // Update with the accumulated time
                             let _ = history.update(Action::SetTotalPlayed(self.total_played));
                         }
                     } else {
                         // Just update the timing information normally
-                        if let Some(history) = self.components.get_mut(2) {
+                        if let Some(history) = self.components.get_mut(COMPONENT_HISTORY) {
                             let _ = history.update(Action::SetTotalPlayed(self.total_played));
                         }
                     }
 
                     // Update NowPlaying component
-                    if let Some(now_playing) = self.components.get_mut(1) {
+                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                         let _ = now_playing.update(action.clone());
                     }
                     // Update History component with the state change
-                    if let Some(history) = self.components.get_mut(2) {
+                    if let Some(history) = self.components.get_mut(COMPONENT_HISTORY) {
                         let _ = history.update(action.clone());
                     }
                 }
                 Action::SetVolume(_level) => {
                     // Update NowPlaying component
-                    if let Some(now_playing) = self.components.get_mut(1) {
+                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
                         let _ = now_playing.update(action.clone());
                     }
                     // Update BottomControls component
-                    if let Some(bottom_controls) = self.components.get_mut(4) {
+                    if let Some(bottom_controls) = self.components.get_mut(COMPONENT_BOTTOM_CONTROLS) {
                         let _ = bottom_controls.update(action.clone());
                     }
                 }
@@ -588,7 +595,7 @@ impl App {
                         let _ = component.update(action.clone());
                     }
                     // Update History component with latest timing information
-                    if let Some(history) = self.components.get_mut(2) {
+                    if let Some(history) = self.components.get_mut(COMPONENT_HISTORY) {
                         // Calculate current played time including current session
                         let current_played = if self.playback_state == PlaybackState::Playing {
                             if let Some(start) = self.playback_start_time {
@@ -819,18 +826,17 @@ impl App {
             // Render each component in its area
             for (i, component) in self.components.iter_mut().enumerate() {
                 let area = match i {
-                    0 => layout.left_panel,      // Station list
-                    1 => layout.right_top,       // Now playing
-                    2 => layout.right_bottom,    // History
-                    4 => layout.bottom,          // Bottom controls
+                    COMPONENT_STATION_LIST => layout.left_panel,
+                    COMPONENT_NOW_PLAYING => layout.right_top,
+                    COMPONENT_HISTORY => layout.right_bottom,
+                    COMPONENT_BOTTOM_CONTROLS => layout.bottom,
                     _ => continue, // Help renders on full screen
                 };
                 let _ = component.draw(frame, area);
             }
 
             // Render help on top (overlay) if visible
-            // Help component is index 3
-            if let Some(help_comp) = self.components.get_mut(3) {
+            if let Some(help_comp) = self.components.get_mut(COMPONENT_HELP) {
                 let _ = help_comp.draw(frame, frame.area());
             }
         })?;

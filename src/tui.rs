@@ -2,8 +2,6 @@
 //!
 //! Provides RAII-style terminal lifecycle management with async event handling.
 
-#![allow(dead_code)]
-
 use std::{
     io::{Stdout, stdout},
     ops::{Deref, DerefMut},
