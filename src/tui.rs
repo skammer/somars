@@ -81,12 +81,14 @@ impl Tui {
     }
 
     /// Enable or disable mouse support
+    #[allow(dead_code)]
     pub fn mouse(mut self, mouse: bool) -> Self {
         self.mouse = mouse;
         self
     }
 
     /// Enable or disable bracketed paste support
+    #[allow(dead_code)]
     pub fn paste(mut self, paste: bool) -> Self {
         self.paste = paste;
         self
@@ -210,6 +212,7 @@ impl Tui {
 
     /// Suspend the application (SIGTSTP)
     #[cfg(not(windows))]
+    #[allow(dead_code)]
     pub fn suspend(&mut self) -> Result<()> {
         self.exit()?;
         signal_hook::low_level::raise(signal_hook::consts::signal::SIGTSTP)?;
@@ -218,6 +221,7 @@ impl Tui {
 
     /// Resume from suspension
     #[cfg(not(windows))]
+    #[allow(dead_code)]
     pub fn resume(&mut self) -> Result<()> {
         self.enter()?;
         Ok(())

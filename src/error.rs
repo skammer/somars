@@ -19,6 +19,7 @@ pub enum AppError {
     #[error("Audio error: {0}")]
     Audio(String),
 
+    #[allow(dead_code)]
     #[error("Stream error: {0}")]
     Stream(String),
 
@@ -28,12 +29,14 @@ pub enum AppError {
     #[error("UDP error: {0}")]
     Udp(String),
 
+    #[allow(dead_code)]
     #[error("Parse error: {0}")]
     Parse(String),
 
     #[error("Configuration error: {0}")]
     Config(String),
 
+    #[allow(dead_code)]
     #[error("Generic error: {0}")]
     Generic(String),
 }
@@ -45,6 +48,7 @@ impl From<crate::config::ConfigError> for AppError {
 }
 
 /// Result type alias for backwards compatibility
+#[allow(dead_code)]
 pub type AppResult<T> = std::result::Result<T, AppError>;
 
 // For new code using color-eyre

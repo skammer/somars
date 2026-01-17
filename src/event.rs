@@ -9,10 +9,12 @@ pub enum Event {
     /// Terminal initialized
     Init,
     /// Quit requested
+    #[allow(dead_code)]
     Quit,
     /// Error occurred
     Error,
     /// Event stream closed
+    #[allow(dead_code)]
     Closed,
     /// Tick event (periodic timer)
     Tick,
@@ -23,6 +25,7 @@ pub enum Event {
     /// Terminal lost focus
     FocusLost,
     /// Paste event (text pasted into terminal)
+    #[allow(dead_code)]
     Paste(String),
     /// Key event
     Key(KeyEvent),

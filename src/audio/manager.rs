@@ -2,6 +2,8 @@
 //!
 //! Provides a centralized interface for audio playback control.
 
+#![allow(dead_code)]
+
 use super::types::{AudioResult, AudioState};
 use rodio::Sink;
 use std::sync::{Arc, Mutex};

@@ -11,9 +11,14 @@ pub enum ControlCommand {
     SelectUp,
     SelectDown,
     Toggle,
+    #[allow(dead_code)]
     TogglePause,
+    #[allow(dead_code)]
     ToggleHelp,
+    #[allow(dead_code)]
     ScrollHistoryUp,
+    #[allow(dead_code)]
     ScrollHistoryDown,
+    #[allow(dead_code)]
     Quit,
 }

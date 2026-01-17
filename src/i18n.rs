@@ -7,12 +7,14 @@ use std::cell::RefCell;
 use std::thread_local;
 
 // Define supported languages
+#[allow(dead_code)]
 pub static LOCALES: Lazy<Vec<LanguageIdentifier>> = Lazy::new(|| vec![
     langid!("en"),
     langid!("ru"),
 ]);
 
 // Default language
+#[allow(dead_code)]
 pub static DEFAULT_LOCALE: Lazy<LanguageIdentifier> = Lazy::new(|| langid!("en"));
 
 // Thread-local storage for bundles

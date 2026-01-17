@@ -3,6 +3,8 @@
 //! This module handles extraction of metadata from audio streams,
 //! such as track titles and artist information embedded in ICY streams.
 
+#![allow(dead_code)]
+
 /// Metadata event extracted from audio stream
 #[derive(Debug, Clone)]
 pub enum MetadataEvent {
