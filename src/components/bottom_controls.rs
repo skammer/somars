@@ -2,14 +2,10 @@
 //!
 //! Displays keyboard shortcuts and debug information at the bottom of the screen.
 
-use crate::{
-    action::Action,
-    components,
-    i18n::t,
-};
+use crate::{action::Action, components, i18n::t};
 
-use components::Component;
 use color_eyre::eyre::Result;
+use components::Component;
 use ratatui::{
     layout::Rect,
     style::{Color, Style},

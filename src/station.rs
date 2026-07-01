@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::error::AppError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct Station {
@@ -44,17 +44,18 @@ impl Station {
         if url.is_empty() {
             return Err(AppError::Station("Empty PLS URL provided".to_string()));
         }
-        
-        let response = reqwest::get(url).await
-            .map_err(|e| AppError::Network(e))?;
-            
+
+        let response = reqwest::get(url).await.map_err(|e| AppError::Network(e))?;
+
         // Check if the response is successful
         if !response.status().is_success() {
-            return Err(AppError::Station(format!("Failed to fetch PLS file: HTTP {}", response.status())));
+            return Err(AppError::Station(format!(
+                "Failed to fetch PLS file: HTTP {}",
+                response.status()
+            )));
         }
-        
-        let pls_content = response.text().await
-            .map_err(|e| AppError::Network(e))?;
+
+        let pls_content = response.text().await.map_err(|e| AppError::Network(e))?;
 
         let mut stream_url = String::new();
         for line in pls_content.lines() {
@@ -67,7 +68,9 @@ impl Station {
         }
 
         if stream_url.is_empty() {
-            Err(AppError::Station("No stream URL found in PLS file".to_string()))
+            Err(AppError::Station(
+                "No stream URL found in PLS file".to_string(),
+            ))
         } else {
             Ok(stream_url)
         }
@@ -80,65 +83,74 @@ impl Station {
             .send()
             .await
             .map_err(|e| AppError::Network(e))?;
-            
+
         // Check if the response is successful
         if !response.status().is_success() {
-            return Err(AppError::Station(format!("Failed to fetch channels: HTTP {}", response.status())));
+            return Err(AppError::Station(format!(
+                "Failed to fetch channels: HTTP {}",
+                response.status()
+            )));
         }
-        
-        let response: ChannelResponse = response.json().await
-            .map_err(|e| AppError::Network(e))?;
 
-        let stations = futures::future::try_join_all(response.channels.into_iter().map(|channel| async move {
-            // Find the highest quality mp3 URL as primary choice
-            let mp3_highest = channel.playlists
-                .iter()
-                .find(|p| p.format == "mp3" && p.quality == "highest")
-                .map(|p| p.url.clone());
-                
-            // Fallback to any mp3 URL
-            let mp3_any = channel.playlists
-                .iter()
-                .find(|p| p.format == "mp3")
-                .map(|p| p.url.clone());
-                
-            // Fallback to any playlist URL
-            let any_url = if channel.playlists.is_empty() {
-                None
-            } else {
-                Some(channel.playlists[0].url.clone())
-            };
+        let response: ChannelResponse = response.json().await.map_err(|e| AppError::Network(e))?;
 
-            // Try URLs in order of preference
-            let playlist_url = mp3_highest.or(mp3_any).or(any_url)
-                .unwrap_or_default();
+        let stations = futures::future::try_join_all(response.channels.into_iter().map(
+            |channel| async move {
+                // Find the highest quality mp3 URL as primary choice
+                let mp3_highest = channel
+                    .playlists
+                    .iter()
+                    .find(|p| p.format == "mp3" && p.quality == "highest")
+                    .map(|p| p.url.clone());
 
-            // Only try to parse PLS if we have a URL
-            let stream_url = if !playlist_url.is_empty() {
-                match Self::parse_pls(&playlist_url).await {
-                    Ok(url) => url,
-                    Err(e) => {
-                        eprintln!("Warning: Failed to parse playlist for station {}: {}", channel.id, e);
-                        // Return the playlist URL directly as fallback
-                        playlist_url.clone()
+                // Fallback to any mp3 URL
+                let mp3_any = channel
+                    .playlists
+                    .iter()
+                    .find(|p| p.format == "mp3")
+                    .map(|p| p.url.clone());
+
+                // Fallback to any playlist URL
+                let any_url = if channel.playlists.is_empty() {
+                    None
+                } else {
+                    Some(channel.playlists[0].url.clone())
+                };
+
+                // Try URLs in order of preference
+                let playlist_url = mp3_highest.or(mp3_any).or(any_url).unwrap_or_default();
+
+                // Only try to parse PLS if we have a URL
+                let stream_url = if !playlist_url.is_empty() {
+                    match Self::parse_pls(&playlist_url).await {
+                        Ok(url) => url,
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to parse playlist for station {}: {}",
+                                channel.id, e
+                            );
+                            // Return the playlist URL directly as fallback
+                            playlist_url.clone()
+                        }
                     }
-                }
-            } else {
-                eprintln!("Warning: No playlist URL found for station {}", channel.id);
-                String::new()
-            };
+                } else {
+                    eprintln!("Warning: No playlist URL found for station {}", channel.id);
+                    String::new()
+                };
 
-            Ok::<Station, AppError>(Station {
-                id: channel.id,
-                title: channel.title,
-                description: channel.description,
-                dj: channel.dj,
-                genre: channel.genre,
-                url: stream_url,
-                image: channel.image,
-                last_playing: channel.last_playing,
-            })
-        })).await?;
+                Ok::<Station, AppError>(Station {
+                    id: channel.id,
+                    title: channel.title,
+                    description: channel.description,
+                    dj: channel.dj,
+                    genre: channel.genre,
+                    url: stream_url,
+                    image: channel.image,
+                    last_playing: channel.last_playing,
+                })
+            },
+        ))
+        .await?;
 
         Ok(stations)
     }

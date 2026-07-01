@@ -11,11 +11,11 @@
 //! a high-level API for audio operations.
 
 pub mod manager;
-pub mod playback;
 pub mod metadata;
+pub mod playback;
+pub mod recovery;
 pub mod stream;
 pub mod types;
-pub mod recovery;
 
 pub use manager::AudioManager;
 

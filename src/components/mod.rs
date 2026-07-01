@@ -3,27 +3,27 @@
 //! Each component implements the Component trait and handles
 //! a specific part of the user interface.
 
-use crossterm::event::{KeyEvent, MouseEvent};
 use color_eyre::eyre::Result;
+use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::{
-    Frame,
     layout::{Rect, Size},
+    Frame,
 };
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{action::Action, config::Config, event::Event};
 
-pub mod station_list;
-pub mod now_playing;
-pub mod history;
-pub mod help;
 pub mod bottom_controls;
+pub mod help;
+pub mod history;
+pub mod now_playing;
+pub mod station_list;
 
-pub use station_list::StationList;
-pub use now_playing::NowPlaying;
-pub use history::History;
-pub use help::Help;
 pub use bottom_controls::BottomControls;
+pub use help::Help;
+pub use history::History;
+pub use now_playing::NowPlaying;
+pub use station_list::StationList;
 
 /// Component trait that represents a visual and interactive element of the user interface.
 ///

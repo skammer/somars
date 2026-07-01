@@ -2,16 +2,10 @@
 //!
 //! Displays information about the currently selected station and playback state.
 
-use crate::{
-    action::Action,
-    components,
-    i18n::t,
-    PlaybackState,
-    station::Station,
-};
+use crate::{action::Action, components, i18n::t, station::Station, PlaybackState};
 
-use components::Component;
 use color_eyre::eyre::Result;
+use components::Component;
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -188,7 +182,8 @@ impl Component for NowPlaying {
                         playback_animation,
                     ]))
                     .title_bottom(
-                        Line::from(format!("[{}: {:.0}%]", t("volume"), self.volume * 100.0)).centered(),
+                        Line::from(format!("[{}: {:.0}%]", t("volume"), self.volume * 100.0))
+                            .centered(),
                     )
                     .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
             );

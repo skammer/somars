@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fs;
 use std::path::PathBuf;
-use std::fmt;
 
 /// Configuration-specific errors
 #[derive(Debug)]
@@ -24,9 +24,7 @@ pub enum ConfigError {
         source: std::io::Error,
     },
     /// Failed to serialize config
-    SerializeError {
-        source: toml::ser::Error,
-    },
+    SerializeError { source: toml::ser::Error },
 }
 
 impl fmt::Display for ConfigError {
@@ -37,13 +35,28 @@ impl fmt::Display for ConfigError {
                           Please set HOME environment variable or ensure your platform's config directory is accessible.")
             }
             ConfigError::ReadError { path, source } => {
-                write!(f, "Failed to read configuration file '{}': {}", path.display(), source)
+                write!(
+                    f,
+                    "Failed to read configuration file '{}': {}",
+                    path.display(),
+                    source
+                )
             }
             ConfigError::ParseError { path, source } => {
-                write!(f, "Failed to parse configuration file '{}': {}", path.display(), source)
+                write!(
+                    f,
+                    "Failed to parse configuration file '{}': {}",
+                    path.display(),
+                    source
+                )
             }
             ConfigError::WriteError { path, source } => {
-                write!(f, "Failed to write configuration file '{}': {}", path.display(), source)
+                write!(
+                    f,
+                    "Failed to write configuration file '{}': {}",
+                    path.display(),
+                    source
+                )
             }
             ConfigError::SerializeError { source } => {
                 write!(f, "Failed to serialize configuration: {}", source)
@@ -79,6 +92,14 @@ pub struct Config {
     pub udp_port: u16,
     #[serde(default)]
     pub udp_enabled: bool,
+    #[serde(default = "default_audio_prefetch_seconds")]
+    pub audio_prefetch_seconds: u64,
+    #[serde(default = "default_audio_startup_prefetch_seconds")]
+    pub audio_startup_prefetch_seconds: u64,
+    #[serde(default = "default_audio_buffer_size_bytes")]
+    pub audio_buffer_size_bytes: usize,
+    #[serde(default = "default_audio_output_buffer_frames")]
+    pub audio_output_buffer_frames: u32,
 }
 
 fn default_volume() -> f32 {
@@ -93,6 +114,22 @@ fn default_udp_port() -> u16 {
     8069
 }
 
+fn default_audio_prefetch_seconds() -> u64 {
+    20
+}
+
+fn default_audio_startup_prefetch_seconds() -> u64 {
+    3
+}
+
+fn default_audio_buffer_size_bytes() -> usize {
+    8 * 1024 * 1024
+}
+
+fn default_audio_output_buffer_frames() -> u32 {
+    4096
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -101,6 +138,10 @@ impl Default for Config {
             log_level: default_log_level(),
             udp_port: default_udp_port(),
             udp_enabled: false,
+            audio_prefetch_seconds: default_audio_prefetch_seconds(),
+            audio_startup_prefetch_seconds: default_audio_startup_prefetch_seconds(),
+            audio_buffer_size_bytes: default_audio_buffer_size_bytes(),
+            audio_output_buffer_frames: default_audio_output_buffer_frames(),
         }
     }
 }
@@ -138,13 +179,13 @@ impl Config {
         };
 
         if config_path.exists() {
-            let content = fs::read_to_string(&config_path)
-                .map_err(|source| ConfigError::ReadError {
+            let content =
+                fs::read_to_string(&config_path).map_err(|source| ConfigError::ReadError {
                     path: config_path.clone(),
                     source,
                 })?;
-            let config: Config = toml::from_str(&content)
-                .map_err(|source| ConfigError::ParseError {
+            let config: Config =
+                toml::from_str(&content).map_err(|source| ConfigError::ParseError {
                     path: config_path.clone(),
                     source,
                 })?;
@@ -167,17 +208,15 @@ impl Config {
         let content = toml::to_string_pretty(self)
             .map_err(|source| ConfigError::SerializeError { source })?;
         if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|source| ConfigError::WriteError {
-                    path: config_path.clone(),
-                    source,
-                })?;
-        }
-        fs::write(&config_path, content)
-            .map_err(|source| ConfigError::WriteError {
-                path: config_path,
+            fs::create_dir_all(parent).map_err(|source| ConfigError::WriteError {
+                path: config_path.clone(),
                 source,
             })?;
+        }
+        fs::write(&config_path, content).map_err(|source| ConfigError::WriteError {
+            path: config_path,
+            source,
+        })?;
         Ok(())
     }
 
@@ -219,6 +258,10 @@ mod tests {
         assert_eq!(config.udp_port, 8069);
         assert_eq!(config.udp_enabled, false);
         assert_eq!(config.last_station, None);
+        assert_eq!(config.audio_prefetch_seconds, 20);
+        assert_eq!(config.audio_startup_prefetch_seconds, 3);
+        assert_eq!(config.audio_buffer_size_bytes, 8 * 1024 * 1024);
+        assert_eq!(config.audio_output_buffer_frames, 4096);
     }
 
     #[test]

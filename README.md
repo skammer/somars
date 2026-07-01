@@ -55,6 +55,8 @@ tune prev   - Switch to previous station (wraps around)
 select up    - Move selection up in station list
 select down  - Move selection down in station list
 toggle       - Toggle between play and stop
+toggle pause - Toggle pause/resume
+seq <N> <CMD> - Send a command with UDP ack; replies with "ok <N>"
 ```
 
 ### Example: Control via netcat

@@ -2,19 +2,15 @@
 //!
 //! Displays keyboard shortcuts and usage information.
 
-use crate::{
-    action::Action,
-    components,
-    i18n::t,
-};
+use crate::{action::Action, components, i18n::t};
 
-use components::Component;
 use color_eyre::eyre::Result;
+use components::Component;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, Borders, BorderType, Paragraph, Padding, Wrap},
+    widgets::{Block, BorderType, Borders, Padding, Paragraph, Wrap},
     Frame,
 };
 use tokio::sync::mpsc::UnboundedSender;

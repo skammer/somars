@@ -2,15 +2,16 @@
 //!
 //! This module sets up structured logging using the `tracing` crate.
 //!
-//! By default, logs are only written to stderr at ERROR level to avoid
-//! interfering with the TUI. To see more detailed logs, set RUST_LOG.
+//! Logs go to `~/.config/somars/somars.log` to avoid corrupting the TUI.
+//! To see more detailed logs, set RUST_LOG.
 
+use std::{fs::OpenOptions, path::PathBuf, sync::Mutex};
 use tracing_subscriber::EnvFilter;
 
 /// Initialize the tracing subscriber for logging
 ///
 /// This sets up structured logging with:
-/// - Stderr output (to avoid interfering with TUI stdout)
+/// - File output (to avoid interfering with TUI stdout/stderr)
 /// - Default level: ERROR only (quiet by default)
 /// - Configurable log level via RUST_LOG environment variable
 /// - Clean formatting without targets (for better readability)
@@ -31,30 +32,51 @@ use tracing_subscriber::EnvFilter;
 /// init_logging();
 /// ```
 ///
-/// # Redirecting Logs to a File
+/// # Log File
 ///
-/// To see logs without interfering with the TUI, redirect stderr to a file:
+/// Logs are written to:
 ///
 /// ```bash
-/// cargo run 2> somars.log
-/// RUST_LOG=debug cargo run 2> somars.log
+/// ~/.config/somars/somars.log
 /// ```
 pub fn init_logging() {
     // Read log level from environment, defaulting to ERROR (quiet by default)
     // Users can set RUST_LOG=debug to see more detailed logs
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("somars=error"));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("somars=error"));
 
-    // Build and initialize the subscriber
-    // Write to stderr to avoid interfering with TUI stdout
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_target(false)  // Don't show module targets, cleaner output
-        .with_thread_ids(false)  // Don't show thread IDs (not needed for single-threaded TUI)
-        .with_file(false)  // Don't show file paths in logs
-        .with_line_number(false)  // Don't show line numbers
-        .with_writer(std::io::stderr)  // Write to stderr, not stdout
-        .init();
+    if let Some(log_file) = open_log_file() {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_target(false)
+            .with_thread_ids(false)
+            .with_file(false)
+            .with_line_number(false)
+            .with_writer(Mutex::new(log_file))
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_target(false)
+            .with_thread_ids(false)
+            .with_file(false)
+            .with_line_number(false)
+            .with_writer(std::io::sink)
+            .init();
+    }
+}
+
+fn open_log_file() -> Option<std::fs::File> {
+    let path = log_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).ok()?;
+    }
+    OpenOptions::new().create(true).append(true).open(path).ok()
+}
+
+fn log_path() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    Some(home.join(".config").join("somars").join("somars.log"))
 }
 
 #[cfg(test)]

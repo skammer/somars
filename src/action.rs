@@ -21,6 +21,7 @@ pub enum Action {
     // Playback control
     Play,
     Stop,
+    TogglePlayStop,
     TogglePause,
     Pause,
     ResumePlayback,

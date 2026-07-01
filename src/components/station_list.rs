@@ -2,16 +2,12 @@
 //!
 //! Displays the list of available SomaFM stations with selection and loading states.
 
-use crate::{
-    action::Action,
-    components,
-    i18n::t,
-    station::Station,
-};
+use crate::{action::Action, components, i18n::t, station::Station};
 
+use color_eyre::eyre::Result;
 use components::Component;
 use crossterm::event::KeyEvent;
-use color_eyre::eyre::Result;
+use ratatui::widgets::ListState;
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -19,7 +15,6 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
-use ratatui::widgets::ListState;
 use tokio::sync::mpsc::UnboundedSender;
 
 /// Station list component
@@ -114,7 +109,6 @@ impl StationList {
         frame.render_widget(loading_para, area);
         Ok(())
     }
-
 }
 
 impl Component for StationList {
@@ -168,7 +162,9 @@ impl Component for StationList {
             if self.selected_index < self.scroll_offset {
                 // Selected item is above visible area, scroll up to it
                 self.scroll_offset = self.selected_index;
-            } else if available_height > 0 && self.selected_index >= self.scroll_offset + available_height {
+            } else if available_height > 0
+                && self.selected_index >= self.scroll_offset + available_height
+            {
                 // Selected item is below visible area, scroll down to it
                 self.scroll_offset = self.selected_index.saturating_sub(available_height - 1);
             }
@@ -189,7 +185,8 @@ impl Component for StationList {
             let total_stations = self.stations.len();
 
             // Only take the visible stations based on scroll offset
-            let visible_stations: Vec<&Station> = self.stations
+            let visible_stations: Vec<&Station> = self
+                .stations
                 .iter()
                 .skip(self.scroll_offset)
                 .take(available_height)

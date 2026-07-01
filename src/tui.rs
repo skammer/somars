@@ -3,11 +3,12 @@
 //! Provides RAII-style terminal lifecycle management with async event handling.
 
 use std::{
-    io::{Stdout, stdout},
+    io::{stdout, Stdout},
     ops::{Deref, DerefMut},
     time::Duration,
 };
 
+use color_eyre::eyre::Result;
 use crossterm::{
     cursor,
     event::{
@@ -16,7 +17,6 @@ use crossterm::{
     },
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use color_eyre::eyre::Result;
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
 use tokio::{

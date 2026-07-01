@@ -4,29 +4,70 @@
 
 #![allow(dead_code)]
 
-use icy_metadata::RequestIcyMetadata;
 use super::types::{AudioError, AudioResult};
+use icy_metadata::RequestIcyMetadata;
 use reqwest::Url;
+use std::time::Duration;
 use stream_download::http::reqwest::Client;
 
 /// Stream configuration
 #[derive(Debug, Clone)]
 pub struct StreamConfig {
-    /// Buffer size in bytes (default: 1MB)
-    pub buffer_size: u64,
-    /// Prefetch bytes based on bitrate (5 seconds worth)
+    /// Buffer size in bytes for the downloaded compressed stream.
+    pub buffer_size: usize,
+    /// Prefetch bytes based on bitrate before decoding starts.
     pub prefetch_seconds: u64,
+    /// Smaller startup prefetch so playback begins before the full jitter buffer fills.
+    pub startup_prefetch_seconds: u64,
     /// Default bitrate if not available in ICY headers (kbps)
     pub default_bitrate: u64,
+    /// Time without new network data before the downloader attempts reconnect.
+    pub retry_timeout: Duration,
+    /// Amount of decoded PCM to queue before handing the source to rodio.
+    pub startup_buffer_seconds: u64,
+    /// How long decoded PCM starvation may last before we rebuild the pipeline.
+    pub stall_grace_period: Duration,
+    /// Delay before rebuilding after reconnect or starvation.
+    pub restart_backoff: Duration,
+    /// Maximum number of restarts before giving up.
+    pub max_restart_attempts: u32,
+    /// Number of decoded samples per PCM chunk.
+    pub pcm_chunk_samples: usize,
+    /// Number of PCM chunks buffered between decoder and output.
+    pub pcm_buffer_chunks: usize,
 }
 
 impl Default for StreamConfig {
     fn default() -> Self {
         Self {
-            buffer_size: 1024 * 1024, // 1MB
-            prefetch_seconds: 5,
+            buffer_size: 8 * 1024 * 1024,
+            prefetch_seconds: 20,
+            startup_prefetch_seconds: 3,
             default_bitrate: 128,
+            retry_timeout: Duration::from_secs(15),
+            startup_buffer_seconds: 1,
+            stall_grace_period: Duration::from_secs(2),
+            restart_backoff: Duration::from_secs(1),
+            max_restart_attempts: 10,
+            pcm_chunk_samples: 8192,
+            pcm_buffer_chunks: 64,
         }
+    }
+}
+
+impl StreamConfig {
+    pub fn from_app_config(config: &crate::config::Config) -> Self {
+        Self {
+            buffer_size: config.audio_buffer_size_bytes,
+            prefetch_seconds: config.audio_prefetch_seconds,
+            startup_prefetch_seconds: config.audio_startup_prefetch_seconds,
+            ..Self::default()
+        }
+    }
+
+    pub fn startup_buffer_samples(&self, sample_rate: u32, channels: u16) -> usize {
+        let per_second = sample_rate as usize * channels as usize;
+        per_second.saturating_mul(self.startup_buffer_seconds as usize)
     }
 }
 
@@ -35,14 +76,13 @@ pub fn create_icy_client() -> AudioResult<Client> {
     Client::builder()
         .request_icy_metadata()
         .build()
-        .map_err(|e| AudioError::InitializationFailed(format!("Failed to create HTTP client: {}", e)))
+        .map_err(|e| {
+            AudioError::InitializationFailed(format!("Failed to create HTTP client: {}", e))
+        })
 }
 
 /// Parses bitrate from ICY headers with fallback
-pub fn parse_bitrate_with_fallback(
-    bitrate: Option<u32>,
-    config: &StreamConfig,
-) -> u64 {
+pub fn parse_bitrate_with_fallback(bitrate: Option<u32>, config: &StreamConfig) -> u64 {
     bitrate.map(|b| b as u64).unwrap_or(config.default_bitrate)
 }
 

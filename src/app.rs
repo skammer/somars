@@ -5,7 +5,7 @@
 use crate::{
     action::Action,
     audio,
-    components::{Component, Help, History, StationList, NowPlaying, BottomControls},
+    components::{BottomControls, Component, Help, History, NowPlaying, StationList},
     config::Config,
     event::Event,
     station::Station,
@@ -14,14 +14,12 @@ use crate::{
 };
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
-use ratatui::{
-    layout::{Constraint, Direction, Layout as RatatuiLayout, Rect},
-};
+use ratatui::layout::{Constraint, Direction, Layout as RatatuiLayout, Rect};
 use rodio::Sink;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 // Component indices - must match order in App::new()
 const COMPONENT_STATION_LIST: usize = 0;
@@ -94,6 +92,13 @@ pub struct App {
 }
 
 impl App {
+    fn abort_playback_task(&mut self) {
+        if let Some(handle) = self.audio_manager.take_handle() {
+            handle.abort();
+        }
+        self.audio_manager.clear_current_station();
+    }
+
     /// Create a new application instance
     pub fn new(
         _tick_rate: f64,
@@ -176,7 +181,7 @@ impl App {
     /// Run the application
     pub async fn run(&mut self) -> Result<()> {
         let mut tui = Tui::new()?
-            .tick_rate(4.0)   // 4 ticks/sec for animations
+            .tick_rate(4.0) // 4 ticks/sec for animations
             .frame_rate(60.0); // 60 fps max for rendering
 
         tui.enter()?;
@@ -248,7 +253,11 @@ impl App {
         use crossterm::event::KeyCode;
 
         // Check for Ctrl+C
-        if key.code == KeyCode::Char('c') && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+        if key.code == KeyCode::Char('c')
+            && key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL)
+        {
             info!("Ctrl+C detected, initiating graceful shutdown");
             self.should_quit = true;
             return Ok(());
@@ -334,6 +343,13 @@ impl App {
                     // Trigger render to show playback state
                     self.action_tx.send(Action::Render)?;
                 }
+                Action::TogglePlayStop => {
+                    match self.playback_state {
+                        PlaybackState::Stopped => self.play_station()?,
+                        PlaybackState::Playing | PlaybackState::Paused => self.stop_playback(),
+                    }
+                    self.action_tx.send(Action::Render)?;
+                }
                 Action::TogglePause => {
                     self.toggle_pause()?;
                     // Trigger render to show playback state
@@ -368,8 +384,10 @@ impl App {
                         self.selected_station = index;
                         // Update NowPlaying component with the selected station details
                         if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
-                            if let Some(station) = self.stations.get(self.selected_station).cloned() {
-                                let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                            if let Some(station) = self.stations.get(self.selected_station).cloned()
+                            {
+                                let _ =
+                                    now_playing.update(Action::SetSelectedStation(Some(station)));
                             } else {
                                 let _ = now_playing.update(Action::SetSelectedStation(None));
                             }
@@ -387,8 +405,10 @@ impl App {
                         };
                         // Update NowPlaying component with the selected station details
                         if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
-                            if let Some(station) = self.stations.get(self.selected_station).cloned() {
-                                let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                            if let Some(station) = self.stations.get(self.selected_station).cloned()
+                            {
+                                let _ =
+                                    now_playing.update(Action::SetSelectedStation(Some(station)));
                             } else {
                                 let _ = now_playing.update(Action::SetSelectedStation(None));
                             }
@@ -406,8 +426,10 @@ impl App {
                         };
                         // Update NowPlaying component with the selected station details
                         if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
-                            if let Some(station) = self.stations.get(self.selected_station).cloned() {
-                                let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                            if let Some(station) = self.stations.get(self.selected_station).cloned()
+                            {
+                                let _ =
+                                    now_playing.update(Action::SetSelectedStation(Some(station)));
                             } else {
                                 let _ = now_playing.update(Action::SetSelectedStation(None));
                             }
@@ -477,11 +499,21 @@ impl App {
             // to avoid double-processing
             let should_forward = match &action {
                 // These actions are handled at app level and should not be forwarded to components
-                Action::Play | Action::Stop | Action::TogglePause | Action::Pause | Action::ResumePlayback |
-                Action::VolumeUp | Action::VolumeDown | Action::SetVolume(_) |
-                Action::TuneStation(_) | Action::TuneNext | Action::TunePrev |
-                Action::StationUp | Action::StationDown |
-                Action::Quit => false,
+                Action::Play
+                | Action::Stop
+                | Action::TogglePlayStop
+                | Action::TogglePause
+                | Action::Pause
+                | Action::ResumePlayback
+                | Action::VolumeUp
+                | Action::VolumeDown
+                | Action::SetVolume(_)
+                | Action::TuneStation(_)
+                | Action::TuneNext
+                | Action::TunePrev
+                | Action::StationUp
+                | Action::StationDown
+                | Action::Quit => false,
                 _ => true,
             };
 
@@ -517,12 +549,17 @@ impl App {
                             if let Some(idx) = stations.iter().position(|s| s.id == *station_id) {
                                 self.selected_station = idx;
                                 // Update components with the selection
-                                if let Some(station_list) = self.components.get_mut(COMPONENT_STATION_LIST) {
+                                if let Some(station_list) =
+                                    self.components.get_mut(COMPONENT_STATION_LIST)
+                                {
                                     let _ = station_list.update(Action::SelectStation(idx));
                                 }
                                 if let Some(station) = stations.get(idx).cloned() {
-                                    if let Some(now_playing) = self.components.get_mut(COMPONENT_NOW_PLAYING) {
-                                        let _ = now_playing.update(Action::SetSelectedStation(Some(station)));
+                                    if let Some(now_playing) =
+                                        self.components.get_mut(COMPONENT_NOW_PLAYING)
+                                    {
+                                        let _ = now_playing
+                                            .update(Action::SetSelectedStation(Some(station)));
                                     }
                                 }
                                 // Start playback
@@ -548,15 +585,17 @@ impl App {
                     self.playback_state = state.clone();
 
                     // Check if we need to start/stop tracking play time
-                    if matches!(old_state, PlaybackState::Stopped | PlaybackState::Paused) &&
-                       matches!(state, PlaybackState::Playing) {
+                    if matches!(old_state, PlaybackState::Stopped | PlaybackState::Paused)
+                        && matches!(state, PlaybackState::Playing)
+                    {
                         // Starting playback - start tracking play time
                         if let Some(history) = self.components.get_mut(COMPONENT_HISTORY) {
                             let _ = history.update(Action::SetTotalPlayed(self.total_played));
                             let _ = history.update(Action::StartTrackingPlayTime);
                         }
-                    } else if matches!(old_state, PlaybackState::Playing) &&
-                              !matches!(state, PlaybackState::Playing) {
+                    } else if matches!(old_state, PlaybackState::Playing)
+                        && !matches!(state, PlaybackState::Playing)
+                    {
                         // Stopping playback - stop tracking and accumulate time
                         if let Some(history) = self.components.get_mut(COMPONENT_HISTORY) {
                             let _ = history.update(Action::StopTrackingPlayTime);
@@ -585,7 +624,9 @@ impl App {
                         let _ = now_playing.update(action.clone());
                     }
                     // Update BottomControls component
-                    if let Some(bottom_controls) = self.components.get_mut(COMPONENT_BOTTOM_CONTROLS) {
+                    if let Some(bottom_controls) =
+                        self.components.get_mut(COMPONENT_BOTTOM_CONTROLS)
+                    {
                         let _ = bottom_controls.update(action.clone());
                     }
                 }
@@ -608,7 +649,8 @@ impl App {
                         };
                         let _ = history.update(Action::SetTotalPlayed(current_played));
                         // Update the playback state as well to ensure it's in sync
-                        let _ = history.update(Action::SetPlaybackState(self.playback_state.clone()));
+                        let _ =
+                            history.update(Action::SetPlaybackState(self.playback_state.clone()));
                     }
                     // Trigger render to update the playback counter
                     needs_render = true;
@@ -632,7 +674,7 @@ impl App {
             let station = station.clone();
             info!(station_id = %station.id, station_title = %station.title, "Starting playback");
 
-            if let Some(ref sink) = self.sink {
+            if let Some(sink) = self.sink.clone() {
                 self.active_station = Some(self.selected_station);
                 let current_time = Instant::now();
                 self.playback_start_time = Some(current_time);
@@ -645,59 +687,49 @@ impl App {
                     }
                 }
 
+                self.abort_playback_task();
+
                 // Stop any existing playback
                 if let Ok(locked_sink) = sink.lock() {
                     locked_sink.stop();
                 }
 
-                let sink = sink.clone();
+                self.add_history_message(
+                    crate::i18n::t("starting-playback").replace("{$station}", &station.title),
+                    MessageType::System,
+                );
+                self.add_history_message(
+                    crate::i18n::t("connecting-to-stream"),
+                    MessageType::System,
+                );
+
                 let log_tx = self.log_tx.clone();
                 let metadata_tx = self.metadata_tx.clone();
-                let station_title_for_completion = station.title.clone();
                 let volume = self.volume;
                 let action_tx = self.action_tx.clone();
+                let stream_config = audio::stream::StreamConfig::from_app_config(&self.config);
 
-                // Spawn playback task
-                tokio::spawn(async move {
-                    match audio::start_playback(&station, sink, metadata_tx, log_tx.clone(), volume).await {
-                        Ok(inner_handle) => {
-                            match inner_handle.await {
-                                Ok(Ok(())) => {
-                                    let _ = log_tx.send(HistoryMessage {
-                                        message: crate::i18n::t("starting-playback").replace("{$station}", &station_title_for_completion),
-                                        message_type: MessageType::System,
-                                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                    }).await;
-                                    let _ = log_tx.send(HistoryMessage {
-                                        message: crate::i18n::t("connecting-to-stream"),
-                                        message_type: MessageType::System,
-                                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                    }).await;
-                                    let _ = log_tx.send(HistoryMessage {
-                                        message: "CLEAR_STATION_LOADING".to_string(),
-                                        message_type: MessageType::Background,
-                                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                    }).await;
-                                }
-                                Ok(Err(e)) => {
-                                    let _ = action_tx.send(Action::Error(format!("Playback error: {}", e)));
-                                }
-                                Err(join_error) => {
-                                    let _ = action_tx.send(Action::Error(format!("Join error: {}", join_error)));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let _ = action_tx.send(Action::Error(format!("Playback error: {}", e)));
-                        }
-                    }
-                });
+                let handle = audio::start_playback(
+                    station.clone(),
+                    sink,
+                    metadata_tx,
+                    log_tx,
+                    action_tx,
+                    volume,
+                    stream_config,
+                );
+                self.audio_manager.set_handle(handle);
+                self.audio_manager.set_current_station(station.id.clone());
 
                 self.playback_state = PlaybackState::Playing;
 
                 // Sync state to components
-                let _ = self.action_tx.send(Action::SetActiveStation(self.active_station));
-                let _ = self.action_tx.send(Action::SetPlaybackState(self.playback_state.clone()));
+                let _ = self
+                    .action_tx
+                    .send(Action::SetActiveStation(self.active_station));
+                let _ = self
+                    .action_tx
+                    .send(Action::SetPlaybackState(self.playback_state.clone()));
             }
         }
         Ok(())
@@ -707,12 +739,12 @@ impl App {
     fn stop_playback(&mut self) {
         debug!("stop_playback called");
         let old_state = self.playback_state.clone();
+        self.abort_playback_task();
         if let Some(ref sink) = self.sink {
             if let Ok(sink) = sink.lock() {
                 match self.playback_state {
                     PlaybackState::Playing => {
                         sink.stop();
-                        sink.empty();
                         self.playback_state = PlaybackState::Stopped;
                         if let Some(start) = self.playback_start_time.take() {
                             self.total_played += start.elapsed();
@@ -721,7 +753,6 @@ impl App {
                     }
                     PlaybackState::Paused => {
                         sink.stop();
-                        sink.empty();
                         self.playback_state = PlaybackState::Stopped;
                         self.last_pause_time = None;
                     }
@@ -734,7 +765,9 @@ impl App {
 
         // Sync state to components if it changed
         if old_state != PlaybackState::Stopped {
-            let _ = self.action_tx.send(Action::SetPlaybackState(self.playback_state.clone()));
+            let _ = self
+                .action_tx
+                .send(Action::SetPlaybackState(self.playback_state.clone()));
         }
     }
 
@@ -768,7 +801,9 @@ impl App {
                     self.last_pause_time = Some(Instant::now());
 
                     // Sync state to components
-                    let _ = self.action_tx.send(Action::SetPlaybackState(self.playback_state.clone()));
+                    let _ = self
+                        .action_tx
+                        .send(Action::SetPlaybackState(self.playback_state.clone()));
                 }
             }
         }
@@ -788,7 +823,9 @@ impl App {
                     self.last_pause_time = None;
 
                     // Sync state to components
-                    let _ = self.action_tx.send(Action::SetPlaybackState(self.playback_state.clone()));
+                    let _ = self
+                        .action_tx
+                        .send(Action::SetPlaybackState(self.playback_state.clone()));
                 }
             }
         } else {

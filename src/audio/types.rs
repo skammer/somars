@@ -42,14 +42,20 @@ pub enum AudioError {
 impl fmt::Display for AudioError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AudioError::InitializationFailed(msg) => write!(f, "Audio initialization failed: {}", msg),
-            AudioError::StreamConnectionFailed(msg) => write!(f, "Stream connection failed: {}", msg),
+            AudioError::InitializationFailed(msg) => {
+                write!(f, "Audio initialization failed: {}", msg)
+            }
+            AudioError::StreamConnectionFailed(msg) => {
+                write!(f, "Stream connection failed: {}", msg)
+            }
             AudioError::DecodeError(msg) => write!(f, "Decode error: {}", msg),
             AudioError::SinkPoisoned => write!(f, "Audio sink mutex poisoned"),
             AudioError::InvalidUrl(url) => write!(f, "Invalid URL: {}", url),
             AudioError::Network(msg) => write!(f, "Network error: {}", msg),
             AudioError::AudioUnderrun => write!(f, "Audio buffer underrun - attempting recovery"),
-            AudioError::StreamRetryable(msg) => write!(f, "Stream temporarily unavailable: {}", msg),
+            AudioError::StreamRetryable(msg) => {
+                write!(f, "Stream temporarily unavailable: {}", msg)
+            }
             AudioError::StreamPermanent(msg) => write!(f, "Permanent stream error: {}", msg),
             AudioError::Other(msg) => write!(f, "Audio error: {}", msg),
         }

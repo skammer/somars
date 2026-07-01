@@ -297,9 +297,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_with_backoff_permanent_error() {
         let result = retry_with_backoff(
-            || async {
-                Err::<(), AudioError>(AudioError::InvalidUrl("bad url".to_string()))
-            },
+            || async { Err::<(), AudioError>(AudioError::InvalidUrl("bad url".to_string())) },
             Default::default(),
         )
         .await;
@@ -314,9 +312,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_with_backoff_exhausted() {
         let result = retry_with_backoff(
-            || async {
-                Err::<(), AudioError>(AudioError::Network("persistent".to_string()))
-            },
+            || async { Err::<(), AudioError>(AudioError::Network("persistent".to_string())) },
             RecoveryConfig {
                 max_retries: 2,
                 initial_backoff: Duration::from_millis(10),

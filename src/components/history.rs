@@ -3,17 +3,12 @@
 //! Displays the history of events and messages with text wrapping and caching.
 
 use crate::{
-    action::Action,
-    components,
-    i18n::t,
-    utils::format_duration,
+    action::Action, components, i18n::t, utils::format_duration, HistoryMessage, MessageType,
     PlaybackState,
-    MessageType,
-    HistoryMessage,
 };
 
-use components::Component;
 use color_eyre::eyre::Result;
+use components::Component;
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -339,8 +334,7 @@ impl Component for History {
                         .right_aligned(),
                     )
                     .title_bottom(
-                        Line::from(vec![Span::raw(format!("[{}]", time_str))])
-                        .left_aligned(),
+                        Line::from(vec![Span::raw(format!("[{}]", time_str))]).left_aligned(),
                     )
                     .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
             );
