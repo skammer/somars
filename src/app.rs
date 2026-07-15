@@ -8,6 +8,7 @@ use crate::{
     components::{BottomControls, Component, Help, History, NowPlaying, StationList},
     config::Config,
     event::Event,
+    mpris::MprisHandle,
     station::Station,
     tui::Tui,
     MessageType, PlaybackState,
@@ -45,6 +46,7 @@ pub struct App {
     // Playback state
     pub playback_state: PlaybackState,
     pub volume: f32,
+    mpris: MprisHandle,
 
     // Audio
     #[allow(dead_code)]
@@ -115,6 +117,7 @@ impl App {
         let volume = config.volume;
         let udp_enabled = config.udp_enabled;
         let udp_port = config.udp_port;
+        let mpris = MprisHandle::start(action_tx.clone(), volume);
 
         // Create components
         let components: Vec<Box<dyn Component>> = vec![
@@ -133,6 +136,7 @@ impl App {
             selected_station: 0,
             playback_state: PlaybackState::Stopped,
             volume,
+            mpris,
             audio_manager: audio::AudioManager::new(),
             sink: Some(sink),
             metadata_tx,
@@ -315,12 +319,32 @@ impl App {
                 }
                 Action::SetActiveStation(idx) => {
                     self.active_station = *idx;
+                    if let Some(station) = idx.and_then(|idx| self.stations.get(idx)) {
+                        self.mpris.set_station(station.clone());
+                    }
                 }
                 Action::SetPlaybackState(state) => {
                     self.playback_state = state.clone();
+                    self.mpris.set_playback_state(state.clone());
                 }
                 Action::SetVolume(level) => {
-                    self.volume = *level;
+                    self.volume = level.clamp(0.0, 2.0);
+                    if let Some(ref sink) = self.sink {
+                        if let Ok(sink) = sink.lock() {
+                            sink.set_volume(self.volume);
+                        }
+                    }
+                    self.mpris.set_volume(self.volume);
+                }
+                Action::MetadataUpdate { station, title } => {
+                    if let Some(active_station) = self
+                        .active_station
+                        .and_then(|index| self.stations.get(index))
+                        .filter(|active_station| active_station.title == *station)
+                    {
+                        self.mpris
+                            .set_track_title(active_station.clone(), title.clone());
+                    }
                 }
                 Action::Error(msg) => {
                     self.add_history_message(msg.clone(), MessageType::Error);
@@ -781,7 +805,7 @@ impl App {
                 self.resume_playback()?;
             }
             PlaybackState::Stopped => {
-                // Do nothing
+                self.play_station()?;
             }
         }
         Ok(())
@@ -828,8 +852,7 @@ impl App {
                         .send(Action::SetPlaybackState(self.playback_state.clone()));
                 }
             }
-        } else {
-            // If not paused, just start playing
+        } else if matches!(self.playback_state, PlaybackState::Stopped) {
             self.play_station()?;
         }
         Ok(())

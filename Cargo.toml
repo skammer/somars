@@ -49,6 +49,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 signal-hook = "0.3"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+mpris-server = { version = "0.10.0", features = ["tokio"] }
+
+[dev-dependencies]
+# Compile and test the Linux MPRIS implementation on non-Linux development hosts.
+mpris-server = { version = "0.10.0", features = ["tokio"] }
+
 # https://github.com/johnthagen/min-sized-rust
 [profile.release]
 opt-level = 'z'     # Optimize for size

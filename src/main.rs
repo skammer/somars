@@ -32,6 +32,7 @@ mod error;
 mod event;
 mod i18n;
 mod logging;
+mod mpris;
 mod tui;
 mod utils;
 use app::App;
@@ -220,7 +221,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
     }
 
     // Create metadata channel for audio playback
-    let (metadata_tx, _) = tokio::sync::mpsc::channel(32);
+    let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::channel(32);
 
     // Create the new App
     let sink = Arc::new(Mutex::new(sink));
@@ -233,6 +234,16 @@ async fn main() -> color_eyre::eyre::Result<()> {
         config.clone(),
         initial_station,
     );
+
+    // Forward ICY stream metadata into application state and MPRIS.
+    let metadata_action_tx = app.action_tx.clone();
+    tokio::spawn(async move {
+        while let Some(event) = metadata_rx.recv().await {
+            if let audio::MetadataEvent::Track { station, title } = event {
+                let _ = metadata_action_tx.send(action::Action::MetadataUpdate { station, title });
+            }
+        }
+    });
 
     // Spawn station fetching task
     let action_tx_clone = app.action_tx.clone();

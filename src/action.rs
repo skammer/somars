@@ -48,7 +48,7 @@ pub enum Action {
     Help,
 
     // Metadata
-    MetadataUpdate(String),
+    MetadataUpdate { station: String, title: String },
 
     // State update (for components)
     UpdateStations(Vec<crate::station::Station>),
