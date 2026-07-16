@@ -226,8 +226,6 @@ async fn main() -> color_eyre::eyre::Result<()> {
     // Create the new App
     let sink = Arc::new(Mutex::new(sink));
     let mut app = App::new(
-        4.0,  // tick_rate
-        60.0, // frame_rate
         sink,
         metadata_tx,
         log_tx.clone(),

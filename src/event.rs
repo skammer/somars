@@ -16,10 +16,6 @@ pub enum Event {
     /// Event stream closed
     #[allow(dead_code)]
     Closed,
-    /// Tick event (periodic timer)
-    Tick,
-    /// Render event (frame timer)
-    Render,
     /// Terminal gained focus
     FocusGained,
     /// Terminal lost focus

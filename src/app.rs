@@ -18,7 +18,7 @@ use crossterm::event::KeyEvent;
 use ratatui::layout::{Constraint, Direction, Layout as RatatuiLayout, Rect};
 use rodio::Sink;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{debug, info};
 
@@ -103,8 +103,6 @@ impl App {
 
     /// Create a new application instance
     pub fn new(
-        _tick_rate: f64,
-        _frame_rate: f64,
         sink: Arc<Mutex<Sink>>,
         metadata_tx: mpsc::Sender<audio::MetadataEvent>,
         log_tx: mpsc::Sender<HistoryMessage>,
@@ -184,9 +182,9 @@ impl App {
 
     /// Run the application
     pub async fn run(&mut self) -> Result<()> {
-        let mut tui = Tui::new()?
-            .tick_rate(4.0) // 4 ticks/sec for animations
-            .frame_rate(60.0); // 60 fps max for rendering
+        let mut tui = Tui::new()?;
+        let mut animation_interval = tokio::time::interval(Duration::from_millis(250));
+        animation_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         tui.enter()?;
 
@@ -204,8 +202,23 @@ impl App {
 
         // Main event loop
         loop {
-            self.handle_events(&mut tui).await?;
-            self.handle_actions(&mut tui)?;
+            let animation_active = self.loading || self.playback_state == PlaybackState::Playing;
+            tokio::select! {
+                event = tui.next_event() => {
+                    if let Some(event) = event {
+                        self.handle_event(event)?;
+                        self.handle_actions(&mut tui, None)?;
+                    }
+                }
+                action = self.action_rx.recv() => {
+                    if let Some(action) = action {
+                        self.handle_actions(&mut tui, Some(action))?;
+                    }
+                }
+                _ = animation_interval.tick(), if animation_active => {
+                    self.handle_actions(&mut tui, Some(Action::Tick))?;
+                }
+            }
 
             if self.should_quit {
                 break;
@@ -217,27 +230,22 @@ impl App {
     }
 
     /// Handle events from the TUI
-    async fn handle_events(&mut self, tui: &mut Tui) -> Result<()> {
-        let Some(event) = tui.next_event().await else {
-            return Ok(());
-        };
-
+    fn handle_event(&mut self, event: Event) -> Result<()> {
         // Convert events to actions
         match event {
+            Event::Init => {
+                self.action_tx.send(Action::Render)?;
+            }
             Event::Quit => {
                 self.action_tx.send(Action::Quit)?;
-            }
-            Event::Tick => {
-                self.action_tx.send(Action::Tick)?;
-            }
-            Event::Render => {
-                self.action_tx.send(Action::Render)?;
             }
             Event::Resize(w, h) => {
                 self.action_tx.send(Action::Resize(w, h))?;
             }
             Event::Key(key) => {
                 self.handle_key_event(key)?;
+                // Some components mutate their state directly on key events.
+                self.action_tx.send(Action::Render)?;
             }
             _ => {}
         }
@@ -295,9 +303,17 @@ impl App {
     }
 
     /// Handle actions from components
-    fn handle_actions(&mut self, tui: &mut Tui) -> Result<()> {
+    fn handle_actions(&mut self, tui: &mut Tui, first_action: Option<Action>) -> Result<()> {
         let mut needs_render = false;
-        while let Ok(action) = self.action_rx.try_recv() {
+        let mut next_action = first_action;
+        loop {
+            let action = match next_action.take() {
+                Some(action) => action,
+                None => match self.action_rx.try_recv() {
+                    Ok(action) => action,
+                    Err(_) => break,
+                },
+            };
             if action != Action::Tick && action != Action::Render {
                 debug!(?action);
             }
@@ -308,10 +324,11 @@ impl App {
                     self.should_quit = true;
                 }
                 Action::Render => {
-                    self.render(tui)?;
+                    needs_render = true;
                 }
                 Action::Resize(w, h) => {
                     tui.resize(Rect::new(0, 0, *w, *h))?;
+                    needs_render = true;
                 }
                 Action::UpdateStations(stations) => {
                     self.stations = stations.clone();
@@ -537,6 +554,8 @@ impl App {
                 | Action::TunePrev
                 | Action::StationUp
                 | Action::StationDown
+                | Action::Tick
+                | Action::Render
                 | Action::Quit => false,
                 _ => true,
             };
@@ -676,10 +695,17 @@ impl App {
                         let _ =
                             history.update(Action::SetPlaybackState(self.playback_state.clone()));
                     }
-                    // Trigger render to update the playback counter
-                    needs_render = true;
+                    // Animate only while visible state changes. Idle stays event-driven.
+                    needs_render |= self.loading || self.playback_state == PlaybackState::Playing;
                 }
                 _ => {}
+            }
+
+            if !matches!(
+                action,
+                Action::Tick | Action::Render | Action::MetadataUpdate { .. } | Action::Quit
+            ) {
+                needs_render = true;
             }
         }
 

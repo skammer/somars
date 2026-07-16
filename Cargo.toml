@@ -58,7 +58,7 @@ mpris-server = { version = "0.10.0", features = ["tokio"] }
 
 # https://github.com/johnthagen/min-sized-rust
 [profile.release]
-opt-level = 'z'     # Optimize for size
+opt-level = 3       # Optimize runtime performance
 lto = true          # Enable link-time optimization
 codegen-units = 1   # Reduce number of codegen units to increase optimizations
 panic = 'abort'     # Abort on panic

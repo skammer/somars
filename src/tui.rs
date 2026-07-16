@@ -22,7 +22,6 @@ use ratatui::backend::CrosstermBackend as Backend;
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
-    time::interval,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::error;
@@ -41,10 +40,6 @@ pub struct Tui {
     pub event_rx: UnboundedReceiver<Event>,
     /// Event sender channel
     pub event_tx: UnboundedSender<Event>,
-    /// Frame rate (frames per second)
-    pub frame_rate: f64,
-    /// Tick rate (ticks per second)
-    pub tick_rate: f64,
     /// Enable mouse capture
     pub mouse: bool,
     /// Enable bracketed paste
@@ -61,23 +56,9 @@ impl Tui {
             cancellation_token: CancellationToken::new(),
             event_rx,
             event_tx,
-            frame_rate: 60.0,
-            tick_rate: 4.0,
             mouse: false,
             paste: false,
         })
-    }
-
-    /// Set the tick rate
-    pub fn tick_rate(mut self, tick_rate: f64) -> Self {
-        self.tick_rate = tick_rate;
-        self
-    }
-
-    /// Set the frame rate
-    pub fn frame_rate(mut self, frame_rate: f64) -> Self {
-        self.frame_rate = frame_rate;
-        self
     }
 
     /// Enable or disable mouse support
@@ -98,27 +79,15 @@ impl Tui {
     pub fn start(&mut self) {
         self.cancel(); // Cancel any existing task
         self.cancellation_token = CancellationToken::new();
-        let event_loop = Self::event_loop(
-            self.event_tx.clone(),
-            self.cancellation_token.clone(),
-            self.tick_rate,
-            self.frame_rate,
-        );
+        let event_loop = Self::event_loop(self.event_tx.clone(), self.cancellation_token.clone());
         self.task = tokio::spawn(async {
             event_loop.await;
         });
     }
 
     /// The main event loop that runs in a separate task
-    async fn event_loop(
-        event_tx: UnboundedSender<Event>,
-        cancellation_token: CancellationToken,
-        tick_rate: f64,
-        frame_rate: f64,
-    ) {
+    async fn event_loop(event_tx: UnboundedSender<Event>, cancellation_token: CancellationToken) {
         let mut event_stream = EventStream::new();
-        let mut tick_interval = interval(Duration::from_secs_f64(1.0 / tick_rate));
-        let mut render_interval = interval(Duration::from_secs_f64(1.0 / frame_rate));
 
         // Send init event
         if event_tx.send(Event::Init).is_err() {
@@ -130,8 +99,6 @@ impl Tui {
                 _ = cancellation_token.cancelled() => {
                     break;
                 }
-                _ = tick_interval.tick() => Event::Tick,
-                _ = render_interval.tick() => Event::Render,
                 crossterm_event = event_stream.next().fuse() => match crossterm_event {
                     Some(Ok(event)) => match event {
                         CrosstermEvent::Key(key) if key.kind == KeyEventKind::Press => Event::Key(key),
