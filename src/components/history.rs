@@ -62,13 +62,32 @@ impl History {
 
     /// Add a message to the history
     pub fn add_message(&mut self, message: HistoryMessage) {
+        let preserve_position =
+            self.scroll_state.selected().is_some() && self.message_is_visible(&message);
+
         self.messages.push_back(message);
-        // Invalidate cache when history changes
         self.cache_valid = false;
 
-        // Remove oldest entries if we exceed capacity
         while self.messages.len() > 1000 {
             self.messages.pop_front();
+        }
+
+        if preserve_position {
+            if let Some(selected) = self.scroll_state.selected() {
+                self.scroll_state.select(Some(selected + 1));
+                *self.scroll_state.offset_mut() += 1;
+            }
+        }
+
+        let visible_count = self.visible_messages().len();
+        if visible_count == 0 {
+            self.scroll_state = ListState::default();
+        } else {
+            if let Some(selected) = self.scroll_state.selected() {
+                self.scroll_state
+                    .select(Some(selected.min(visible_count - 1)));
+            }
+            *self.scroll_state.offset_mut() = self.scroll_state.offset().min(visible_count - 1);
         }
     }
 
@@ -129,36 +148,35 @@ impl History {
         }
     }
 
-    /// Scroll up (visually up, which means decrease index due to BottomToTop direction)
+    /// Scroll toward newer messages.
     fn scroll_up(&mut self) {
         let visible_count = self.visible_messages().len();
         if visible_count == 0 {
             return;
         }
         if self.scroll_state.selected().is_none() {
-            // First scroll - start at position 0 (top of list)
             self.scroll_state.select(Some(0));
         } else {
             let i = self.scroll_state.selected().unwrap_or(0);
-            if i < visible_count - 1 {
-                self.scroll_state.select(Some(i + 1));
+            if i > 0 {
+                self.scroll_state.select(Some(i - 1));
             }
         }
     }
 
-    /// Scroll down (visually down, which means increase index due to BottomToTop direction)
+    /// Scroll toward older messages.
     fn scroll_down(&mut self) {
         let visible_count = self.visible_messages().len();
         if visible_count == 0 {
             return;
         }
         if self.scroll_state.selected().is_none() {
-            // First scroll - start at position 0 (top of list)
-            self.scroll_state.select(Some(0));
+            self.scroll_state
+                .select(Some(usize::from(visible_count > 1)));
         } else {
             let i = self.scroll_state.selected().unwrap_or(0);
-            if i > 0 {
-                self.scroll_state.select(Some(i - 1));
+            if i < visible_count - 1 {
+                self.scroll_state.select(Some(i + 1));
             }
         }
     }
@@ -190,18 +208,21 @@ impl History {
         self.last_width = width;
     }
 
-    /// Filter visible messages based on log level
+    fn message_is_visible(&self, message: &HistoryMessage) -> bool {
+        self.log_level > 1
+            || matches!(
+                message.message_type,
+                MessageType::Error | MessageType::Info | MessageType::Playback
+            )
+    }
+
+    /// Return visible messages from newest to oldest.
     fn visible_messages(&self) -> Vec<(usize, HistoryMessage)> {
         self.messages
             .iter()
             .enumerate()
-            .filter(|(_, msg)| {
-                self.log_level > 1
-                    || matches!(
-                        msg.message_type,
-                        MessageType::Error | MessageType::Info | MessageType::Playback
-                    )
-            })
+            .rev()
+            .filter(|(_, msg)| self.message_is_visible(msg))
             .map(|(idx, msg)| (idx, msg.clone()))
             .collect()
     }
@@ -226,8 +247,7 @@ impl Component for History {
                 Ok(None)
             }
             KeyCode::Esc => {
-                // Reset scroll position and hide selection
-                self.scroll_state.select(None);
+                self.scroll_state = ListState::default();
                 Ok(None)
             }
             _ => Ok(None),
@@ -276,7 +296,6 @@ impl Component for History {
 
         let history_items: Vec<ListItem> = visible_messages
             .iter()
-            .rev()
             .map(|(idx, msg)| {
                 let style = match msg.message_type {
                     MessageType::Error => Style::default().fg(Color::Red),
@@ -319,7 +338,7 @@ impl Component for History {
         let time_str = format_duration(current_time);
 
         let history_list = List::new(history_items)
-            .direction(ListDirection::BottomToTop)
+            .direction(ListDirection::TopToBottom)
             .highlight_style(Style::default().bg(Color::Blue))
             .block(
                 Block::default()
@@ -339,7 +358,7 @@ impl Component for History {
                     .padding(ratatui::widgets::Padding::new(1, 1, 0, 0)),
             );
 
-        frame.render_stateful_widget(history_list, area, &mut self.scroll_state.clone());
+        frame.render_stateful_widget(history_list, area, &mut self.scroll_state);
         Ok(())
     }
 }
@@ -347,5 +366,77 @@ impl Component for History {
 impl Default for History {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    fn message(text: &str, message_type: MessageType) -> HistoryMessage {
+        HistoryMessage {
+            message: text.to_string(),
+            message_type,
+            timestamp: "00:00:00".to_string(),
+        }
+    }
+
+    #[test]
+    fn shows_newest_visible_message_first() {
+        let mut history = History::new();
+        history.add_message(message("old", MessageType::Info));
+        history.add_message(message("hidden", MessageType::Background));
+        history.add_message(message("new", MessageType::Playback));
+
+        let messages: Vec<_> = history
+            .visible_messages()
+            .into_iter()
+            .map(|(_, message)| message.message)
+            .collect();
+
+        assert_eq!(messages, ["new", "old"]);
+    }
+
+    #[test]
+    fn navigation_moves_down_to_older_and_up_to_newer() {
+        let mut history = History::new();
+        history.add_message(message("old", MessageType::Info));
+        history.add_message(message("middle", MessageType::Info));
+        history.add_message(message("new", MessageType::Info));
+
+        history.scroll_down();
+        assert_eq!(history.scroll_state.selected(), Some(1));
+        history.scroll_down();
+        assert_eq!(history.scroll_state.selected(), Some(2));
+        history.scroll_up();
+        assert_eq!(history.scroll_state.selected(), Some(1));
+    }
+
+    #[test]
+    fn new_message_preserves_manually_scrolled_position() {
+        let mut history = History::new();
+        history.add_message(message("old", MessageType::Info));
+        history.add_message(message("new", MessageType::Info));
+        history.scroll_down();
+
+        history.add_message(message("newest", MessageType::Info));
+
+        assert_eq!(history.scroll_state.selected(), Some(2));
+        assert_eq!(history.visible_messages()[2].1.message, "old");
+    }
+
+    #[test]
+    fn escape_returns_to_latest_message() {
+        let mut history = History::new();
+        history.add_message(message("old", MessageType::Info));
+        history.add_message(message("new", MessageType::Info));
+        history.scroll_down();
+
+        history
+            .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+
+        assert_eq!(history.scroll_state, ListState::default());
     }
 }
