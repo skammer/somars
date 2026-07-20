@@ -5,6 +5,7 @@
 
 #![allow(dead_code)]
 
+use super::icy_reader::IcyMetadataReader;
 use super::metadata::MetadataEvent;
 use super::recovery::{retry_with_backoff, RecoveryConfig};
 use super::stream::{
@@ -475,7 +476,7 @@ async fn prepare_attempt(
 
     let config_for_decoder = config.clone();
     let source_result = tokio::task::spawn_blocking(move || {
-        let decoder = Decoder::new(icy_metadata::IcyMetadataReader::new(
+        let decoder = Decoder::new(IcyMetadataReader::new(
             reader,
             icy_headers.metadata_interval(),
             move |metadata| {

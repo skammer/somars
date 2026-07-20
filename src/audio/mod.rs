@@ -10,6 +10,7 @@
 //! The main entry point is the [`AudioManager`] struct which provides
 //! a high-level API for audio operations.
 
+mod icy_reader;
 pub mod manager;
 pub mod metadata;
 pub mod playback;
