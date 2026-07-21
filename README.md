@@ -10,7 +10,7 @@ A Rust implementation of a SomaFM internet radio player with TUI interface and U
 - Volume control
 - Playback history tracking
 - UDP remote control interface
-- Linux MPRIS integration (desktop media controls and `playerctl`)
+- Native desktop media integration (Linux MPRIS, macOS Now Playing, Windows SMTC)
 - Cross-platform support (Linux/macOS/Windows)
 
 ## Installation
@@ -89,11 +89,13 @@ echo "tune groovesalad" | socat -u - udp-datagram:255.255.255.255:8069,reuseport
 - `?` - Toggle help screen
 - `q` - Quit
 
-## Linux MPRIS
+## Desktop media controls
 
-While `somars` is running, Linux desktop media controls and `playerctl` can
-control playback, station navigation, and volume. Current station and ICY track
-metadata are published automatically.
+While `somars` is running, native desktop media controls can control playback
+and station navigation. Current station and ICY track metadata are published to
+Linux MPRIS, macOS Now Playing, and Windows System Media Transport Controls.
+
+On Linux, `playerctl` is also supported:
 
 ```bash
 playerctl --player=somars play-pause

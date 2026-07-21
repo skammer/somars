@@ -46,11 +46,39 @@ toml = "0.9.10"
 dirs = "6.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"
-signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris-server = { version = "0.10.0", features = ["tokio"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# 0.4.3 allows incompatible apple-cf releases; 0.2.1 keeps the compatible range.
+mediaplayer = "=0.2.1"
+dispatch = "0.2.0"
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "NSApplication",
+    "NSEvent",
+    "NSGraphicsContext",
+    "NSResponder",
+    "NSRunningApplication",
+] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "NSGeometry",
+] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+souvlaki = { version = "0.8.3", default-features = false }
+windows = { version = "0.44", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
 # Compile and test the Linux MPRIS implementation on non-Linux development hosts.

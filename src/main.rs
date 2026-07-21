@@ -32,7 +32,9 @@ mod error;
 mod event;
 mod i18n;
 mod logging;
-mod mpris;
+#[cfg(target_os = "macos")]
+mod macos_runtime;
+mod media_session;
 mod tui;
 mod utils;
 use app::App;
@@ -98,8 +100,26 @@ pub enum PlaybackState {
     Stopped,
 }
 
+#[cfg(not(target_os = "macos"))]
 #[tokio::main]
 async fn main() -> color_eyre::eyre::Result<()> {
+    async_main().await
+}
+
+#[cfg(target_os = "macos")]
+fn main() -> color_eyre::eyre::Result<()> {
+    macos_runtime::run(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| {
+                color_eyre::eyre::eyre!("Failed to initialize async runtime: {error}")
+            })?
+            .block_on(async_main())
+    })
+}
+
+async fn async_main() -> color_eyre::eyre::Result<()> {
     // Initialize logging early (before other operations)
     logging::init_logging();
 
@@ -233,7 +253,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
         initial_station,
     );
 
-    // Forward ICY stream metadata into application state and MPRIS.
+    // Forward ICY stream metadata into application state and desktop media sessions.
     let metadata_action_tx = app.action_tx.clone();
     tokio::spawn(async move {
         while let Some(event) = metadata_rx.recv().await {
